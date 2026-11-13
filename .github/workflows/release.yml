@@ -1,0 +1,47 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Check release version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
+          }
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build installer and portable app
+        run: npm run build:win
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $installer = "dist/ChunkTrainer-Setup-$version-x64.exe"
+          $portable = "dist/ChunkTrainer-Portable-$version-x64.exe"
+          foreach ($path in @($installer, $portable)) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing release file: $path" }
+          }
+          $checksums = @($installer, $portable) | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path -Leaf $_)"
+          }
+          $checksums | Set-Content -LiteralPath 'dist/SHA256SUMS.txt' -Encoding ascii
+          gh release create $env:GITHUB_REF_NAME $installer $portable 'dist/SHA256SUMS.txt' --title "ChunkTrainer $env:GITHUB_REF_NAME" --notes-file "docs/releases/$env:GITHUB_REF_NAME.md" --latest --verify-tag
