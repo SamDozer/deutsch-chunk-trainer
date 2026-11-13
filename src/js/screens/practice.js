@@ -214,6 +214,7 @@ function stepProduce(chunk, local) {
   const total = rec.produce.total || 0;
   const batches = store.batchState(chunk.id);
   const now = new Date();
+  const session1Done = total >= 10;
 
   return html`
     ${stepHead(3, 'درّب عليه 30 إنتاج', 'مش 30 مرة نفس الجملة — 30 جملة مختلفة بنفس القالب، موزّعة على أسبوع.')}
@@ -221,14 +222,19 @@ function stepProduce(chunk, local) {
     <div class="produce-top">
       <div class="ring-wrap">${ring(total, 30)}</div>
       <div class="produce-copy">
-        <strong>${total >= 30 ? 'خلّصت الـ30 إنتاج' : `فاضل ${30 - total} إنتاج`}</strong>
-        <span>الخطة: 10 في الجلسة الأولى، وبعدين 5 × 4 مرات على مدار أسبوع. البرنامج بيفكرك بيهم في صفحة المراجعة.</span>
+        <strong>${total >= 30 ? 'خلّصت الـ30 إنتاج كاملين ✓' : session1Done ? `جلسة اليوم مكتملة (${total} من 30)` : `فاضل ${10 - total} إنتاج لإكمال الجلسة الأولى`}</strong>
+        <span>${session1Done ? 'الجلسة الأولى (10 جمل) تمت بنجاح! باقي الجلسات مجدولة للتثبيت في المراجعة، وتقدر تسجل تدريب إضافي دلوقتي لو حابب.' : 'الخطة: 10 في الجلسة الأولى، وبعدين 5 × 4 مرات على مدار أسبوع. البرنامج بيفكرك بيهم في صفحة المراجعة.'}</span>
       </div>
     </div>
 
-    <div class="callout">
-      ${icon('spark')}
-      <span><b>مهم:</b> 10 جمل مختلفة في الجلسة الأولى — لو كررت نفس الجملة 30 مرة هتحفظ الصوت مش اللغة.</span>
+    <div class="callout" style="${session1Done ? 'background:var(--card-2);border-inline-start-color:var(--green)' : ''}">
+      ${icon(session1Done ? 'check' : 'spark')}
+      <span>${session1Done ? '<b>ممتاز:</b> الجلسة الأولى كافية لفتح باقي الخطوات والإتقان. المواعيد الجاية معمولة للتكرار المتباعد.' : '<b>مهم:</b> 10 جمل مختلفة في الجلسة الأولى — لو كررت نفس الجملة 30 مرة هتحفظ الصوت مش اللغة.'}</span>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px">
+      <div class="eyebrow">جدول جلسات التوزيع</div>
+      <button class="btn btn-ghost btn-sm" data-act="batch:extra" title="سجل إنتاج إضافي دون انتظار المؤقت">${icon('spark')} تدريب حر إضافي (+5)</button>
     </div>
 
     <table class="batch-table">
@@ -305,7 +311,7 @@ function stepVary(chunk, local) {
               <span class="counter-badge ${items.length ? 'is-full' : ''}">${items.length}</span>
             </div>
             <span class="axis-hint">${axis.hint}</span>
-            <textarea data-draft="${axis.key}" placeholder="اكتب جملة واحدة على الأقل...">${local.drafts[axis.key] || ''}</textarea>
+            <textarea data-draft="${axis.key}" dir="auto" placeholder="اكتب جملة واحدة على الأقل...">${local.drafts[axis.key] || ''}</textarea>
             <button class="btn btn-ghost btn-sm" data-act="vary:save" data-axis="${axis.key}" style="align-self:flex-start;margin-top:6px">
               ${icon('check')} سجّل التنويع
             </button>
@@ -360,18 +366,19 @@ function stepTest(chunk) {
   const sprint = rec.test.sprint;
   const speaking = rec.test.speaking;
   const delayed = rec.test.delayed;
-  const variationCount = rec.vary.items.length;
+  const variationCount = rec.vary.items.length || (rec.vary.importedDone ? 5 : 0);
   const delayedDue = store.delayedDue(chunk.id);
   const delayedReady = Boolean(delayedDue && delayedDue <= new Date());
-  const passedCount = [recall.passed, variationCount >= 5, sprint.count >= 5, speaking.seconds >= 30, delayed.passed].filter(Boolean).length;
+  const daysLeft = delayedDue ? Math.max(1, daysBetween(new Date(), delayedDue)) : 7;
+  const passedCount = [recall.passed, variationCount >= 5, sprint.count >= 5, speaking.seconds >= 30].filter(Boolean).length;
 
   return html`
-    ${stepHead(5, 'اختبر نفسك', 'خمس اختبارات. النجاح مش معناه إنك شفت الجملة — معناه إنك طلّعتها لوحدك.')}
+    ${stepHead(5, 'اختبر نفسك', 'أربع اختبارات فورية للاستدعاء والتنويع والسرعة والكلام، واختبار مؤجل بعد أسبوع.')}
     <div class="produce-top" style="gap:18px">
-      <div class="counter-badge ${passedCount === 5 ? 'is-full' : ''}" style="font-size:14px;height:30px;padding:0 12px">${passedCount} من 5</div>
+      <div class="counter-badge ${passedCount === 4 ? 'is-full' : ''}" style="font-size:14px;height:30px;padding:0 12px">${passedCount} من 4</div>
       <div class="produce-copy">
-        <strong>${passedCount === 5 ? 'كل الاختبارات عدّت' : 'كمّل الاختبارات الناقصة'}</strong>
-        <span>الاستدعاء والسرعة والكلام شرط للإتقان، والاستدعاء المؤجل بييجي بعد أسبوع.</span>
+        <strong>${passedCount === 4 ? 'كل الاختبارات الفورية اكتملت بنجاح ✓' : 'كمّل الاختبارات الفورية الناقصة'}</strong>
+        <span>الاستدعاء والسرعة والكلام والتنويع شرط أساسي للإتقان المبدئي. الاستدعاء المؤجل يأتي بعد أسبوع في جدول المراجعة.</span>
       </div>
     </div>
 
@@ -384,7 +391,7 @@ function stepTest(chunk) {
         <p class="test-req">اقرا العربي وقول الألماني في ثانيتين تقريبًا. محتاج 4 من 5.</p>
         <div class="test-foot">
           <span class="test-state ${recall.passed ? 'done' : ''}">
-            ${recall.at ? `${recall.score} من ${recall.total} · ${relativeWhen(recall.at)}` : 'لسه ما اتجربش'}
+            ${recall.passed ? `تم ✓ (${recall.score} من ${recall.total})` : recall.at ? `${recall.score} من ${recall.total} · ${relativeWhen(recall.at)}` : 'لسه ما اتجربش'}
           </span>
           <button class="btn ${recall.passed ? 'btn-ghost' : 'btn-primary'} btn-sm" data-act="recall:start">${recall.passed ? 'أعد' : 'ابدأ'}</button>
         </div>
@@ -397,7 +404,7 @@ function stepTest(chunk) {
         </div>
         <p class="test-req">5 جمل مختلفة بنفس القالب — بتتحسب من خطوة «غيّر».</p>
         <div class="test-foot">
-          <span class="test-state ${variationCount >= 5 ? 'done' : ''}">${variationCount} من 5 جمل</span>
+          <span class="test-state ${variationCount >= 5 ? 'done' : ''}">${variationCount >= 5 ? 'تم ✓ (5 من 5 جمل)' : `${variationCount} من 5 جمل`}</span>
           ${variationCount >= 5
             ? html`<span class="test-state done">تم</span>`
             : html`<button class="btn btn-ghost btn-sm" data-act="go-step" data-step="4">روح لخطوة 4</button>`}
@@ -411,7 +418,7 @@ function stepTest(chunk) {
         </div>
         <p class="test-req">5 جمل في دقيقة واحدة. السرعة بتبيّن إن القالب بقى في دماغك.</p>
         <div class="test-foot">
-          <span class="test-state ${sprint.count >= 5 ? 'done' : ''}">${sprint.at ? `${sprint.count} جمل` : 'لسه ما اتجربش'}</span>
+          <span class="test-state ${sprint.count >= 5 ? 'done' : ''}">${sprint.count >= 5 ? `تم ✓ (${sprint.count} جمل/دقيقة)` : sprint.at ? `${sprint.count} جمل` : 'لسه ما اتجربش'}</span>
           <button class="btn ${sprint.count >= 5 ? 'btn-ghost' : 'btn-primary'} btn-sm" data-act="sprint:start">${sprint.count ? 'أعد' : 'ابدأ'}</button>
         </div>
       </div>
@@ -424,31 +431,33 @@ function stepTest(chunk) {
         <p class="test-req">اتكلم 30–45 ثانية واستخدم الجملة طبيعي في الكلام.</p>
         <div class="test-foot">
           <span class="test-state ${speaking.seconds >= 30 ? 'done' : ''}">
-            ${speaking.at ? `${Math.round(speaking.seconds)} ثانية` : 'لسه ما اتجربش'}
+            ${speaking.seconds >= 30 ? `تم ✓ (${Math.round(speaking.seconds)} ثانية)` : speaking.at ? `${Math.round(speaking.seconds)} ثانية` : 'لسه ما اتجربش'}
           </span>
-          <button class="btn ${speaking.seconds >= 30 ? 'btn-ghost' : 'btn-primary'} btn-sm" data-act="speaking:start">${speaking.at ? 'أعد' : 'ابدأ'}</button>
+          <button class="btn ${speaking.seconds >= 30 ? 'btn-ghost' : 'btn-primary'} btn-sm" data-act="speaking:start">${speaking.seconds >= 30 ? 'أعد' : 'ابدأ'}</button>
         </div>
       </div>
 
       <div class="test-card ${delayed.passed ? 'is-done' : ''}" style="grid-column:1/-1">
         <div class="test-head">
-          <span class="test-ico ${delayed.passed ? 'green' : delayedReady ? '' : 'green'}">${delayed.passed ? icon('trophy') : icon('calendar')}</span>
-          <h4>استدعاء مؤجل</h4>
+          <span class="test-ico ${delayed.passed ? 'green' : delayedReady ? '' : 'locked'}">${delayed.passed ? icon('trophy') : icon('calendar')}</span>
+          <h4>استدعاء مؤجل (تثبيت متباعد بعد 7 أيام)</h4>
         </div>
-        <p class="test-req">بعد أسبوع من خطوة التنويع، قول الجملة من غير أي مراجعة في اليوم ده.</p>
+        <p class="test-req">بعد أسبوع من خطوة التنويع، قول الجملة من غير أي مراجعة في اليوم ده لتأكيد تثبيتها في الذاكرة الدائمة.</p>
         <div class="test-foot">
           <span class="test-state ${delayed.passed ? 'done' : delayedReady ? '' : 'locked'}">
             ${delayed.passed
-              ? `عدّى · ${relativeWhen(delayed.at)}`
+              ? `عدّى بنجاح · ${relativeWhen(delayed.at)}`
               : !delayedDue
-                ? 'بيفتح بعد إكمال خطوة «غيّر»'
+                ? 'بيفتح تلقائيًا بعد أسبوع من خطوة «غيّر»'
                 : delayedReady
                   ? 'مستحق النهاردة'
-                  : `بيفتح بعد ${Math.max(1, daysBetween(new Date(), delayedDue))} أيام`}
+                  : `🔒 مقفل — بيفتح بعد ${daysLeft} أيام`}
           </span>
           ${delayed.passed
-            ? html`<span class="test-state done">تم</span>`
-            : html`<button class="btn btn-primary btn-sm" data-act="delayed:start" ${delayedReady ? '' : 'disabled'}>ابدأ</button>`}
+            ? html`<span class="test-state done">تم ✓</span>`
+            : delayedReady
+              ? html`<button class="btn btn-primary btn-sm" data-act="delayed:start">ابدأ</button>`
+              : html`<button class="btn btn-ghost btn-sm" disabled style="opacity:0.5;cursor:not-allowed">${icon('lock')} يفتح بعد ${daysLeft} يوم</button>`}
         </div>
       </div>
     </div>
@@ -463,11 +472,11 @@ function stepMastery(chunk, next) {
   const gates = [
     { done: flags[0], label: 'فهمت الـChunk وحددت وظيفته', hint: 'خطوة 1', step: 1 },
     { done: flags[1], label: 'نطقته 3 مرات بصوت عالي', hint: 'خطوة 2', step: 2 },
-    { done: flags[2], label: '30 إنتاج موزعين على أسبوع', hint: 'خطوة 3', step: 3 },
+    { done: flags[2], label: 'إنتاج الجلسة الأولى (10 جمل على الأقل)', hint: 'خطوة 3', step: 3 },
     { done: flags[3], label: '4 محاور تنويع', hint: 'خطوة 4', step: 4 },
     {
       done: flags[4],
-      label: 'الاختبارات: استدعاء + سرعة + كلام + استدعاء مؤجل',
+      label: 'الاختبارات الفورية: استدعاء + تنويع + سرعة + كلام (4 من 4)',
       hint: 'خطوة 5',
       step: 5,
     },
@@ -500,7 +509,7 @@ function stepMastery(chunk, next) {
               <h3>الجملة متقنة ✓</h3>
               <p>${rec.mastery.at ? `اتقنت ${relativeWhen(rec.mastery.at)}` : ''} · المراجعة الجاية ${dueLabel(rec.review.due)}</p>
             </div>
-            <a class="btn btn-primary" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها ${icon('forward')}</a>
+            ${next ? html`<a class="btn btn-primary" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها (${next.id}) ${icon('forward')}</a>` : ''}
           </div>
         `
       : ready
@@ -508,8 +517,8 @@ function stepMastery(chunk, next) {
             <div class="mastery-card">
               <div class="mastery-sticker">${icon('trophy')}</div>
               <div>
-                <h3>كل الشروط اكتملت</h3>
-                <p>لو حاسس إن الجملة خرجت منك لوحدها من غير تفكير طويل — اعتبرها متقنة.</p>
+                <h3>كل الشروط اكتملت ✓</h3>
+                <p>لو حاسس إن الجملة بتخرج منك طبيعي وبسرعة — اعتبرها متقنة، وهتدخل جدول المراجعات الدورية تلقائيًا.</p>
               </div>
               <button class="btn btn-primary" data-act="mastery:complete">اعتبره متقن ${icon('check')}</button>
             </div>
@@ -524,7 +533,7 @@ function stepMastery(chunk, next) {
 
     <div class="callout" style="background:var(--card-2);border-inline-start-color:var(--blue)">
       ${icon('calendar')}
-      <span>بعد الإتقان، الجملة بتدخل جدول المراجعة: بعد 3 أيام، وبعدها الفواصل بتطول تلقائيًا كل مرة تعرفها.</span>
+      <span>بعد الإتقان، الجملة بتدخل جدول المراجعة التكرارية: بعد 3 أيام، وبعدها الفواصل بتطول تلقائيًا كل مرة تعرفها.</span>
     </div>
 
     ${!mastered && !ready
@@ -574,6 +583,11 @@ export const practiceScreen = {
     const requested = Number(query.get('step'));
     const step = clamp(Number.isFinite(requested) && requested > 0 ? requested : store.currentStep(chunk.id), 1, 6);
     const total = store.peek(chunk.id)?.produce.total || 0;
+    const phase = store.sessionPhase(chunk.id);
+    const level = store.level(chunk.level);
+    const cIndex = level?.chunks?.findIndex((c) => c.id === chunk.id) ?? -1;
+    const prevC = cIndex > 0 ? level.chunks[cIndex - 1] : null;
+    const nextC = cIndex >= 0 && cIndex < (level?.chunks?.length - 1) ? level.chunks[cIndex + 1] : null;
 
     return html`
       <div class="page practice-page" style="--lv:var(--${chunk.level.toLowerCase()})">
@@ -583,6 +597,12 @@ export const practiceScreen = {
             <strong>${chunk.level} · ${chunk.id}</strong>
             <span class="dot-sep"></span>
             <span class="sub muted">${chunk.family ? `قالب: ${chunk.template}` : 'جملة مستقلة'}</span>
+            <span class="dot-sep"></span>
+            <span class="chip chip-yellow" style="font-size:11px">${phase.label}</span>
+          </div>
+          <div class="chunk-nav-seq" style="margin-inline-start:auto;display:flex;align-items:center;gap:6px">
+            ${prevC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${prevC.id}?step=1" title="الجملة السابقة (${prevC.id})">${icon('back')} ${prevC.id}</a>` : ''}
+            ${nextC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${nextC.id}?step=1" title="الجملة التالية (${nextC.id})">${nextC.id} ${icon('forward')}</a>` : ''}
           </div>
           <span class="saveflag" id="saveflag">محفوظ تلقائيًا</span>
         </div>
@@ -627,15 +647,23 @@ export const practiceScreen = {
     let heartbeat = null;
     let clockTick = null;
 
+    const prevChunk = () => {
+      const level = store.level(chunk.level);
+      const index = level.chunks.findIndex((c) => c.id === chunk.id);
+      const preceding = level.chunks[index - 1];
+      if (preceding) return { id: preceding.id, step: store.currentStep(preceding.id) };
+      return null;
+    };
     const nextChunk = () => {
       const level = store.level(chunk.level);
       const index = level.chunks.findIndex((c) => c.id === chunk.id);
       const following = level.chunks[index + 1];
       if (following) return { id: following.id, step: store.currentStep(following.id) };
       const nextLevel = store.levels[store.levels.findIndex((l) => l.id === chunk.level) + 1];
-      if (nextLevel) return { id: nextLevel.chunks[0].id, step: 1 };
-      return { id: chunk.id, step: 1 };
+      if (nextLevel && nextLevel.chunks[0]) return { id: nextLevel.chunks[0].id, step: 1 };
+      return null;
     };
+    const prev = prevChunk();
     const next = nextChunk();
 
     const setSaveFlag = (state = 'saved') => {
@@ -669,8 +697,9 @@ export const practiceScreen = {
         ${current < 6
           ? html`<button class="btn btn-primary btn-sm" data-act="next">الخطوة اللي بعدها ${icon('forward')}</button>`
           : store.peek(chunk.id)?.mastery?.done
-            ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها ${icon('forward')}</a>`
+            ? (next ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها (${next.id}) ${icon('forward')}</a>` : '')
             : html`<button class="btn btn-ghost btn-sm" data-act="finish" disabled>كمّل الشروط الأول</button>`}
+        ${next ? html`<a class="btn btn-quiet btn-sm" href="#/practice/${next.id}?step=${next.step}" style="margin-inline-start:auto" title="انتقل للجملة التالية مباشرة">الجملة التالية (${next.id}) ${icon('forward')}</a>` : ''}
       </div>
     `;
 
@@ -713,6 +742,7 @@ export const practiceScreen = {
         area.value = drafts[area.dataset.draft] || '';
         area.addEventListener('input', () => {
           drafts[area.dataset.draft] = area.value;
+          area.removeAttribute('aria-invalid');
         });
       });
     };
@@ -804,10 +834,19 @@ export const practiceScreen = {
           paint();
           break;
         }
+        case 'batch:extra': {
+          store.addProduction(chunk.id, 5);
+          toast('سجلت 5 إنتاجات إضافية بنجاح ✓', 'check');
+          paint();
+          break;
+        }
         case 'vary:save': {
           const axis = target.dataset.axis;
-          const text = drafts[axis] || panel.querySelector(`[data-draft="${axis}"]`)?.value || '';
+          const field = target.closest('.axis-card')?.querySelector('[data-draft]');
+          const text = field?.value || drafts[axis] || '';
           if (!text.trim()) {
+            field?.setAttribute('aria-invalid', 'true');
+            field?.focus();
             toast('اكتب جملة الأول', 'spark');
             return;
           }
@@ -848,6 +887,10 @@ export const practiceScreen = {
           });
           break;
         case 'delayed:start':
+          if (!store.delayedReady(chunk.id)) {
+            toast('الاستدعاء المؤجل هيفتح بعد أسبوع من خطوة التنويع', 'clock');
+            return;
+          }
           openRecallDrill(chunk, {
             onDone: ({ passed, score, total }) => {
               if (passed) {

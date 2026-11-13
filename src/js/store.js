@@ -82,18 +82,19 @@ const defaultState = () => ({
 
 function stageFlags(rec) {
   const speak = rec.speak?.passes?.slow && rec.speak?.passes?.natural && rec.speak?.passes?.blind;
+  const variationTestDone = (rec.vary?.items?.length || 0) >= 5 || (rec.test?.variation?.count || 0) >= 5 || Boolean(rec.vary?.importedDone);
+  const immediateTestsPassed = Boolean(
+    rec.test?.recall?.passed &&
+      rec.test?.sprint?.count >= 5 &&
+      rec.test?.speaking?.seconds >= 30 &&
+      variationTestDone,
+  );
   return [
     Boolean(rec.understand?.done),
     Boolean(speak),
-    (rec.produce?.total || 0) >= 30,
+    (rec.produce?.total || 0) >= 10,
     (rec.vary?.items?.length || 0) >= 4 || Boolean(rec.vary?.importedDone),
-    Boolean(
-      rec.test?.recall?.passed &&
-        rec.test?.sprint?.count >= 5 &&
-        rec.test?.speaking?.seconds >= 30 &&
-        rec.test?.variation?.count >= 5 &&
-        rec.test?.delayed?.passed,
-    ),
+    immediateTestsPassed,
     Boolean(rec.mastery?.done),
   ];
 }
@@ -270,6 +271,33 @@ class Store {
     if (rec.mastery?.done) return 'mastered';
     if (this.completedCount(id) > 0 || (rec.produce?.total || 0) > 0) return 'learning';
     return 'new';
+  }
+
+  sessionPhase(id) {
+    const rec = this.peek(id);
+    if (!rec) return { code: 'new', label: 'جديد', step: 1 };
+    if (rec.mastery?.done) return { code: 'mastered', label: 'متقن ومراجعته مجدولة', step: 6 };
+    const prodTotal = rec.produce?.total || 0;
+    const batches = this.batchState(id);
+    const doneBatches = batches.filter((b) => b.done).length;
+    const nextBatch = batches.find((b) => !b.done);
+    if (prodTotal >= 30) {
+      return { code: 'all_sessions', label: '30/30 إنتاج مكتمل', step: 5 };
+    }
+    if (prodTotal >= 10) {
+      if (nextBatch?.overdue) {
+        return { code: 'session_due', label: `جلسة ${nextBatch.index + 1} مستحقة الآن`, step: 3 };
+      }
+      return { code: 'session1_done', label: `جلسة 1 تمت · (${doneBatches}/5 جلسات)`, step: 4 };
+    }
+    if (prodTotal > 0) {
+      return { code: 'session1_prog', label: `جلسة 1 (${prodTotal}/10)`, step: 3 };
+    }
+    const currentStep = this.currentStep(id);
+    if (currentStep > 1) {
+      return { code: 'learning', label: `خطوة ${currentStep} من 6`, step: currentStep };
+    }
+    return { code: 'new', label: 'جديد', step: 1 };
   }
 
   currentStep(id) {

@@ -137,11 +137,18 @@ npm start
 >
 > لو `npm install` خلّص من غير ما ينزّل Electron، شغّل `node node_modules/electron/install.js` مرة واحدة.
 
-### بناء نسخة مستقلة (اختياري)
+### نسخة Windows الجاهزة
+
+من [صفحة الإصدارات](https://github.com/abdoabdo22334456-prog/deutsch-chunk-trainer/releases) حمّل ملف `ChunkTrainer-Setup-...exe` للتثبيت أو `ChunkTrainer-Portable-...exe` للتشغيل بدون تثبيت. النسختان تحتويان Electron والملفات اللازمة؛ لا تحتاج تثبيت Node.js أو متصفح منفصل. بيانات التقدم محفوظة خارج ملفات البرنامج، وتظل موجودة عند تحديث التطبيق.
+
+### بناء نسخة Windows من المصدر
 
 ```powershell
-npx @electron/packager . "Chunk Trainer" --platform=win32 --arch=x64 --icon=assets/icon.ico --out=dist
+npm ci
+npm run build:win
 ```
+
+ستجد ملف التثبيت والنسخة المحمولة داخل `dist/`. هذا البناء لا ينشر الإصدار تلقائيًا على GitHub.
 
 ## اختصارات
 

@@ -1,6 +1,7 @@
 node_modules/
 shots/
 dist/
+dist-portable/
 *.log
 electron-out.log
 electron-err.log

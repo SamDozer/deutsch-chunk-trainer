@@ -4,6 +4,8 @@ import { el, html, icon, raw } from './utils.js';
 export function toast(message, ico = 'check') {
   const root = document.getElementById('toast-root');
   if (!root) return;
+  const visible = [...root.querySelectorAll('.toast:not(.is-out)')];
+  if (visible.some((item) => item.querySelector('span')?.textContent === String(message))) return;
   const node = el(html`<div class="toast">${icon(ico)}<span>${message}</span></div>`);
   root.append(node);
   setTimeout(() => {
@@ -12,15 +14,36 @@ export function toast(message, ico = 'check') {
   }, 3000);
 }
 
+const activeModals = new Set();
+
+export function closeAllModals() {
+  for (const modal of [...activeModals]) {
+    try {
+      modal.close();
+    } catch (e) {
+      console.warn('Error closing modal:', e);
+    }
+  }
+  const root = document.getElementById('modal-root');
+  if (root) root.innerHTML = '';
+  activeModals.clear();
+}
+
 export function openModal(content, options = {}) {
+  // Prevent stacking modals unless explicitly permitted
+  if (options.keepExisting !== true) {
+    closeAllModals();
+  }
+
   const backdrop = el(html`
     <div class="modal-backdrop">
       <div class="modal ${options.className || ''}">${content}</div>
     </div>
   `);
   const root = document.getElementById('modal-root');
-  root.append(backdrop);
+  if (root) root.append(backdrop);
   const previous = document.activeElement;
+  let isClosed = false;
 
   const onKey = (event) => {
     if (event.key === 'Escape') {
@@ -43,9 +66,16 @@ export function openModal(content, options = {}) {
   };
 
   function close() {
+    if (isClosed) return;
+    isClosed = true;
     document.removeEventListener('keydown', onKey, true);
     backdrop.remove();
-    options.onClose?.();
+    activeModals.delete(modalInstance);
+    try {
+      options.onClose?.();
+    } catch (e) {
+      console.error('Error in modal onClose:', e);
+    }
     if (previous && typeof previous.focus === 'function') previous.focus();
   }
 
@@ -58,7 +88,9 @@ export function openModal(content, options = {}) {
     target?.focus();
   });
   options.onMount?.(backdrop, close);
-  return { root: backdrop, close };
+  const modalInstance = { root: backdrop, close };
+  activeModals.add(modalInstance);
+  return modalInstance;
 }
 
 export function confirmDialog({ title, text, confirm = 'أيوة', cancel = 'إلغاء', danger = false }) {

@@ -40,7 +40,8 @@ function rowMarkup(chunk, currentId) {
   const flags = store.stageFlags(chunk.id);
   const done = flags.filter(Boolean).length;
   const status = store.status(chunk.id);
-  const statusLabel = status === 'mastered' ? 'متقن' : done > 0 ? `${done} من 6` : 'جديد';
+  const phase = store.sessionPhase(chunk.id);
+  const statusLabel = phase.label;
   const statusClass = status === 'mastered' ? 'is-done' : done > 0 ? 'is-prog' : '';
   const step = store.currentStep(chunk.id);
   return html`
@@ -115,10 +116,15 @@ export const levelScreen = {
             <h1>${level.id} — ${level.title}</h1>
             <p class="sub">${levelDescription(levelId)}</p>
           </div>
-          <a class="btn btn-primary btn-sm" style="margin-inline-start:auto"
-            href="#/practice/${firstUnfinished.id}?step=${store.currentStep(firstUnfinished.id)}">
-            ${icon('play')} ابدأ من أول غير متقن
-          </a>
+          <div class="row" style="margin-inline-start:auto;gap:8px">
+            <a class="btn btn-ghost btn-sm" href="#/practice/${level.chunks[0].id}?step=1">
+              ${icon('play')} ابدأ بالترتيب (${level.id}-001)
+            </a>
+            <a class="btn btn-primary btn-sm"
+              href="#/practice/${firstUnfinished.id}?step=${store.currentStep(firstUnfinished.id)}">
+              ${icon('forward')} كمّل من غير المتقن
+            </a>
+          </div>
         </div>
 
         <section class="level-hero" data-code="${level.id}">

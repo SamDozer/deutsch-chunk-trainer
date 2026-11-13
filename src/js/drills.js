@@ -118,7 +118,10 @@ export function openSprintDrill(chunk, { seconds = 60, target = 5, onDone } = {}
 
   const modal = openModal(html`<div class="drill" id="sprint-body"></div>`, {
     className: 'drill-modal',
-    onClose: () => clearInterval(interval),
+    onClose: () => {
+      finished = true;
+      clearInterval(interval);
+    },
   });
   const body = modal.root.querySelector('#sprint-body');
 
@@ -128,17 +131,18 @@ export function openSprintDrill(chunk, { seconds = 60, target = 5, onDone } = {}
         <span>سباق الـ60 ثانية</span>
         <span>${formatClock(left)}</span>
       </div>
-      <p class="drill-prompt">قول جمل مختلفة بنفس القالب — كل جملة اضغط +1</p>
+      <p class="drill-prompt">قول جمل مختلفة بنفس القالب — كل جملة تخلصها اضغط +1</p>
       <div class="drill-ar" style="font-size:17px;margin-bottom:8px">${chunk.ar}</div>
       <div class="drill-timer-bar"><span style="width:${(left / seconds) * 100}%"></span></div>
-      <div class="sprint-count">${count}</div>
-      <p class="sub muted" style="margin-bottom:4px">الهدف ${target} جمل في الدقيقة</p>
-      <div class="drill-actions" style="margin-top:10px">
-        <button class="btn btn-primary" data-plus>+1 جملة</button>
-        <button class="btn btn-ghost" data-stop>خلصت (${count})</button>
+      <div class="sprint-count">${count} <small style="font-size:16px;font-weight:normal;color:var(--muted)">/ ${target} جمل</small></div>
+      <p class="sub muted" style="margin-bottom:8px">الهدف: ${target} جمل على الأقل في الدقيقة</p>
+      <div class="drill-actions" style="margin-top:12px;gap:10px">
+        <button class="btn btn-primary" data-plus style="font-size:16px;font-weight:700;padding:10px 20px">+1 جملة جديدة</button>
+        <button class="btn btn-ghost" data-stop style="border:1px solid var(--line);font-size:14px">إنهاء وحفظ (${count})</button>
       </div>
     `);
     body.querySelector('[data-plus]').addEventListener('click', () => {
+      if (finished) return;
       count += 1;
       paint();
     });
@@ -153,6 +157,7 @@ export function openSprintDrill(chunk, { seconds = 60, target = 5, onDone } = {}
 
   paint();
   interval = setInterval(() => {
+    if (finished) return;
     left -= 1;
     if (left <= 0) {
       left = 0;
@@ -201,7 +206,10 @@ export function openSpeakingDrill(chunk, { seconds = 45, minSeconds = 30, onDone
     `,
     {
       className: 'drill-modal',
-      onClose: () => clearInterval(interval),
+      onClose: () => {
+        finished = true;
+        clearInterval(interval);
+      },
     },
   );
 
@@ -215,12 +223,20 @@ export function openSpeakingDrill(chunk, { seconds = 45, minSeconds = 30, onDone
   });
 
   const tick = () => {
+    if (finished) return;
     const used = Math.min(seconds, Math.round((Date.now() - started) / 1000));
     clock.textContent = `${formatClock(used)} / ${formatClock(seconds)}`;
     bar.style.width = `${(used / seconds) * 100}%`;
     const ready = used >= minSeconds;
     done.disabled = !ready;
     hint.textContent = ready ? 'تمام، كمّل لحد ما تحس إن الجملة خرجت لوحدها.' : `لسه ${minSeconds - used} ثانية على أقل حاجة مقبولة.`;
+
+    if (used >= seconds) {
+      finished = true;
+      clearInterval(interval);
+      modal.close();
+      onDone?.({ seconds, note });
+    }
   };
 
   done.addEventListener('click', () => {

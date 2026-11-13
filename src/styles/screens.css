@@ -1629,6 +1629,17 @@ button.chunk-row {
   outline-offset: 1px;
 }
 
+.axis-card textarea {
+  text-align: start;
+  unicode-bidi: plaintext;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.axis-card textarea[aria-invalid='true'] {
+  border-color: var(--red);
+}
+
 /* step 4 */
 
 .axis-grid {

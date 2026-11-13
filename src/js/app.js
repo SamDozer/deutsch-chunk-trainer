@@ -1,7 +1,7 @@
 // App shell: boot, hash router, chrome status, global error surface.
 import { store } from './store.js';
 import { html, icon, chunksLabel } from './utils.js';
-import { toast } from './ui.js';
+import { toast, closeAllModals } from './ui.js';
 import { homeScreen } from './screens/home.js';
 import { levelScreen } from './screens/level.js';
 import { practiceScreen } from './screens/practice.js';
@@ -75,6 +75,7 @@ function updateChrome(name) {
 function route() {
   const match = resolve();
   try {
+    closeAllModals();
     cleanup?.();
     cleanup = null;
     const context = {
