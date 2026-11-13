@@ -1,0 +1,11 @@
+node_modules/
+shots/
+dist/
+*.log
+electron-out.log
+electron-err.log
+out2.log
+err2.log
+*.tmp
+.DS_Store
+Thumbs.db
