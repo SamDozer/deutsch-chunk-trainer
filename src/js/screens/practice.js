@@ -423,7 +423,7 @@ function stepTest(chunk) {
           <span class="test-ico ${recall.passed ? 'green' : ''}">${icon('clock')}</span>
           <h4>استدعاء سريع</h4>
         </div>
-        <p class="test-req">اقرا العربي وقول الألماني في ثانيتين تقريبًا. محتاج 4 من 5.</p>
+        <p class="test-req">اقرا العربي وقول الألماني قبل انتهاء العدّ التنازلي. محتاج 4 من 5.</p>
         <div class="test-foot">
           <span class="test-state ${recall.passed ? 'done' : ''}">
             ${recall.passed ? `تم ✓ (${recall.score} من ${recall.total})` : recall.at ? `${recall.score} من ${recall.total} · ${relativeWhen(recall.at)}` : 'لسه ما اتجربش'}

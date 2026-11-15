@@ -3,11 +3,45 @@ import { openModal } from './ui.js';
 import { html, icon, formatClock } from './utils.js';
 import { audioEngine } from './audioEngine.js';
 
-export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {}) {
+// Dynamic Recall Duration Configuration
+export const BASE_BUFFER_MS = 1000;
+export const MS_PER_WORD = 480;
+export const LONG_WORD_BONUS_MS = 150;
+export const MIN_DURATION_MS = 2000;
+
+export function calculateRecallDurationMs(targetGermanSentence = '') {
+  const sentence = typeof targetGermanSentence === 'string'
+    ? targetGermanSentence
+    : (targetGermanSentence?.de || '');
+  if (!sentence || typeof sentence !== 'string') return MIN_DURATION_MS;
+
+  const clean = sentence.trim();
+  if (!clean) return MIN_DURATION_MS;
+
+  const words = clean.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+
+  let longWordCount = 0;
+  for (const w of words) {
+    const letters = w.replace(/[^a-zA-ZäöüÄÖÜß0-9]/g, '');
+    if (letters.length > 8) {
+      longWordCount += 1;
+    }
+  }
+
+  const rawDuration = BASE_BUFFER_MS + (wordCount * MS_PER_WORD) + (longWordCount * LONG_WORD_BONUS_MS);
+  return Math.max(MIN_DURATION_MS, rawDuration);
+}
+
+export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = null } = {}) {
   const results = [];
   let round = 0;
   let closed = false;
   let timer = null;
+
+  const totalDurationMs = seconds ? seconds * 1000 : calculateRecallDurationMs(chunk?.de);
+  const initialSeconds = Math.ceil(totalDurationMs / 1000);
+  const CIRCUMFERENCE = 144.5;
 
   const modal = openModal(
     html`<div class="drill" id="drill-body"></div>`,
@@ -23,8 +57,11 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
   const body = modal.root.querySelector('#drill-body');
 
   const paintRound = () => {
+    clearInterval(timer);
     const revealed = { value: false };
-    const remaining = { value: seconds };
+    const startTime = Date.now();
+    let lastSecondAnnounced = null;
+
     if (round >= rounds) {
       const score = results.filter(Boolean).length;
       const passed = score >= Math.ceil(rounds * 0.8);
@@ -69,9 +106,9 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
                   <circle class="t-bg" cx="27" cy="27" r="23"></circle>
                   <circle class="t-fg" cx="27" cy="27" r="23"
                     stroke-dasharray="144.5"
-                    stroke-dashoffset="${144.5 * (1 - remaining.value / seconds)}"></circle>
+                    stroke-dashoffset="0"></circle>
                 </svg>
-                <span class="timer-num">${remaining.value}</span>
+                <span class="timer-num">${initialSeconds}</span>
               </div>
               <button class="btn btn-ghost btn-sm" data-reveal>شوف الجملة بدري</button>
             `}
@@ -90,8 +127,10 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
         revealed.value = true;
         render();
       });
+
       body.querySelectorAll('[data-answer]').forEach((button) => {
         button.addEventListener('click', () => {
+          clearInterval(timer);
           const isYes = button.dataset.answer === 'yes';
           results.push(isYes);
           if (isYes) audioEngine.playSetComplete(round);
@@ -100,20 +139,48 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
           paintRound();
         });
       });
+
       if (!revealed.value) {
         clearInterval(timer);
+        const ringFg = body.querySelector('.timer-ring .t-fg');
+        const timerNumEl = body.querySelector('.timer-ring .timer-num');
+        if (ringFg) ringFg.style.transition = 'none';
+
         timer = setInterval(() => {
-          remaining.value -= 1;
-          if (remaining.value <= 3 && remaining.value > 0) {
-            audioEngine.playCountdownTick(remaining.value);
+          if (closed) {
+            clearInterval(timer);
+            return;
           }
-          if (remaining.value <= 0) {
+          const elapsed = Date.now() - startTime;
+          const remainingMs = Math.max(0, totalDurationMs - elapsed);
+          const currentSec = Math.ceil(remainingMs / 1000);
+
+          // Update circular ring stroke
+          const progress = Math.max(0, Math.min(1, remainingMs / totalDurationMs));
+          const offset = CIRCUMFERENCE * (1 - progress);
+          if (ringFg) {
+            ringFg.setAttribute('stroke-dashoffset', offset.toFixed(2));
+          }
+
+          // Update displayed countdown number
+          if (timerNumEl && timerNumEl.textContent !== String(currentSec)) {
+            timerNumEl.textContent = String(currentSec);
+          }
+
+          // Audio tick during final 3 seconds
+          if (currentSec <= 3 && currentSec > 0 && currentSec !== lastSecondAnnounced) {
+            lastSecondAnnounced = currentSec;
+            audioEngine.playCountdownTick(currentSec);
+          }
+
+          // Time's up -> reveal
+          if (remainingMs <= 0) {
             clearInterval(timer);
             revealed.value = true;
             audioEngine.playRestComplete();
+            render();
           }
-          render();
-        }, 1000);
+        }, 40);
       }
     };
 
