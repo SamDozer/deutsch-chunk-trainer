@@ -9,6 +9,9 @@ import { reviewScreen } from './screens/review.js';
 import { statsScreen } from './screens/stats.js';
 import { settingsScreen } from './screens/settings.js';
 import { methodScreen } from './screens/method.js';
+import { trophiesScreen } from './screens/trophies.js';
+import { audioEngine } from './audioEngine.js';
+import { trophyManager } from './trophies.js';
 
 const routes = [
   { name: 'home', pattern: /^\/?$/, screen: homeScreen },
@@ -17,6 +20,7 @@ const routes = [
   { name: 'practice', pattern: /^\/practice\/([A-Z]\d-\d{3})$/, screen: practiceScreen, keys: ['chunkId'] },
   { name: 'review', pattern: /^\/review$/, screen: reviewScreen },
   { name: 'stats', pattern: /^\/stats$/, screen: statsScreen },
+  { name: 'trophies', pattern: /^\/trophies$/, screen: trophiesScreen },
   { name: 'settings', pattern: /^\/settings$/, screen: settingsScreen },
   { name: 'method', pattern: /^\/method$/, screen: methodScreen },
 ];
@@ -70,6 +74,15 @@ function updateChrome(name) {
     html`${icon('flame')}${streak > 0 ? html`<span><b>${streak}</b> يوم متواصل</span>` : html`<span>ابدأ سلسلتك</span>`}`,
   );
   pill.title = streak > 0 ? `${streak} يوم متواصل` : 'لسه مفيش أيام متواصلة';
+
+  const soundBtn = document.getElementById('sound-btn');
+  if (soundBtn) {
+    const isMuted = !audioEngine.soundEnabled;
+    soundBtn.innerHTML = String(html`<svg class="i"><use href="#${isMuted ? 'i-speaker-off' : 'i-speaker'}" /></svg>`);
+    soundBtn.title = isMuted ? 'الصوت مكتوم — اضغط للتشغيل' : 'المؤثرات الصوتية مفعلة — اضغط للكتم';
+    soundBtn.setAttribute('aria-label', soundBtn.title);
+    soundBtn.classList.toggle('is-muted', isMuted);
+  }
 }
 
 function route() {
@@ -130,7 +143,29 @@ async function boot() {
     return;
   }
 
-  document.getElementById('settings-btn').addEventListener('click', () => navigate('#/settings'));
+  document.getElementById('settings-btn')?.addEventListener('click', () => navigate('#/settings'));
+
+  document.getElementById('sound-btn')?.addEventListener('click', () => {
+    const enabled = audioEngine.toggleSound();
+    updateChrome(current?.name || 'home');
+    toast(enabled ? 'تم تفعيل المؤثرات الصوتية 🔊' : 'تم كتم الصوت 🔇', enabled ? 'speaker' : 'speaker-off');
+  });
+
+  // Global tactile feedback for buttons and switches
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest('button, a, .switch, .tab-btn');
+    if (!target) return;
+    if (target.id === 'sound-btn') return; // Handled separately
+    if (target.dataset.noSound) return;
+    if (target.classList.contains('switch')) {
+      const isNowOn = !target.classList.contains('is-on');
+      audioEngine.playToggle(isNowOn);
+    } else {
+      audioEngine.playTap();
+    }
+  });
+
+  audioEngine.onPreferenceChange(() => updateChrome(current?.name || 'home'));
 
   if (new URLSearchParams(location.search).get('debug') === '1') window.__store = store;
 

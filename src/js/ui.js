@@ -1,5 +1,6 @@
 // Overlay primitives: toast + accessible light modal.
 import { el, html, icon, raw } from './utils.js';
+import { audioEngine } from './audioEngine.js';
 
 export function toast(message, ico = 'check') {
   const root = document.getElementById('toast-root');

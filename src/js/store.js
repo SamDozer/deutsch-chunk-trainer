@@ -146,12 +146,10 @@ class Store {
     }
 
     this.state = this.normalize(loadedState);
-    let importedNow = false;
     if (!this.state.meta.importedObsidian) {
-      this.importLegacyProgress(false);
-      importedNow = true;
+      this.state.meta.importedObsidian = true;
     }
-    this.freshImport = importedNow;
+    this.freshImport = false;
     if (!this.state.pointer) this.state.pointer = this.firstUnfinishedPointer();
     this.loaded = true;
     this.save();
@@ -172,7 +170,17 @@ class Store {
       pointer: loaded.pointer || null,
     };
     for (const [id, rec] of Object.entries(state.chunks)) {
+      // Clean up spurious B2/C1 entries caused by leaked modals if they have no real user content
+      if ((id.startsWith('B2-') || id.startsWith('C1-')) && (!rec.vary?.items?.length && !rec.notes && !rec.mastery?.done)) {
+        delete state.chunks[id];
+        continue;
+      }
       state.chunks[id] = this.normalizeRecord(rec);
+    }
+    for (const day of Object.values(state.days)) {
+      if (Array.isArray(day.chunks)) {
+        day.chunks = day.chunks.filter((cid) => state.chunks[cid] || (!cid.startsWith('B2-') && !cid.startsWith('C1-')));
+      }
     }
     return state;
   }

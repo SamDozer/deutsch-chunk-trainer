@@ -1,6 +1,7 @@
 import { store } from '../store.js';
 import { html, icon, dueLabel, relativeWhen, chunksLabel } from '../utils.js';
 import { toast } from '../ui.js';
+import { audioEngine } from '../audioEngine.js';
 
 const TYPE_LABEL = {
   review: 'مراجعة جملة متقنة',
@@ -67,6 +68,7 @@ export const reviewScreen = {
     const revealed = new Set();
 
     const finish = () => {
+      audioEngine.playWorkoutComplete();
       const good = results.filter((r) => r === 'good').length;
       const hard = results.filter((r) => r === 'hard').length;
       const again = results.filter((r) => r === 'again').length;
@@ -152,6 +154,10 @@ export const reviewScreen = {
 
     const onGrade = (grade) => {
       const item = queue[index];
+      if (grade === 'good') audioEngine.playSetComplete(index);
+      else if (grade === 'again') audioEngine.playSoftError();
+      else audioEngine.playTap();
+
       if (item.type === 'review') {
         store.gradeReview(item.id, grade);
         results.push(grade);
@@ -188,10 +194,12 @@ export const reviewScreen = {
       if (produce) {
         const item = queue[index];
         if (produce.dataset.amount === '0') {
+          audioEngine.playSoftError();
           toast('اتخطت — هتفضل مستحقة', 'clock');
           nextItem();
           return;
         }
+        audioEngine.playSetComplete(index);
         store.addProduction(item.id, item.amount || 5);
         results.push('good');
         toast(`سجلت ${item.amount || 5} إنتاج`, 'check');

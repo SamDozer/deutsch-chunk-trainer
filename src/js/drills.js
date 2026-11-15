@@ -1,6 +1,7 @@
 // Timed drills shared by the practice wizard and the review queue.
 import { openModal } from './ui.js';
 import { html, icon, formatClock } from './utils.js';
+import { audioEngine } from './audioEngine.js';
 
 export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {}) {
   const results = [];
@@ -27,6 +28,12 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
     if (round >= rounds) {
       const score = results.filter(Boolean).length;
       const passed = score >= Math.ceil(rounds * 0.8);
+      if (passed) {
+        if (score === rounds) audioEngine.playWorkoutComplete();
+        else audioEngine.playExerciseComplete();
+      } else {
+        audioEngine.playSoftError();
+      }
       body.innerHTML = String(html`
         <div class="mastery-sticker" style="margin:0 auto 14px;width:66px;height:66px;font-size:26px">
           ${icon('trophy')}
@@ -85,7 +92,10 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
       });
       body.querySelectorAll('[data-answer]').forEach((button) => {
         button.addEventListener('click', () => {
-          results.push(button.dataset.answer === 'yes');
+          const isYes = button.dataset.answer === 'yes';
+          results.push(isYes);
+          if (isYes) audioEngine.playSetComplete(round);
+          else audioEngine.playSoftError();
           round += 1;
           paintRound();
         });
@@ -94,9 +104,13 @@ export function openRecallDrill(chunk, { onDone, rounds = 5, seconds = 2 } = {})
         clearInterval(timer);
         timer = setInterval(() => {
           remaining.value -= 1;
+          if (remaining.value <= 3 && remaining.value > 0) {
+            audioEngine.playCountdownTick(remaining.value);
+          }
           if (remaining.value <= 0) {
             clearInterval(timer);
             revealed.value = true;
+            audioEngine.playRestComplete();
           }
           render();
         }, 1000);
@@ -144,12 +158,17 @@ export function openSprintDrill(chunk, { seconds = 60, target = 5, onDone } = {}
     body.querySelector('[data-plus]').addEventListener('click', () => {
       if (finished) return;
       count += 1;
+      audioEngine.playStepper('up');
+      if (count === target) {
+        audioEngine.playSetComplete(target);
+      }
       paint();
     });
     body.querySelector('[data-stop]').addEventListener('click', () => {
       if (finished) return;
       finished = true;
       clearInterval(interval);
+      if (count >= target) audioEngine.playExerciseComplete();
       modal.close();
       onDone?.({ count, seconds: seconds - left });
     });
@@ -159,11 +178,16 @@ export function openSprintDrill(chunk, { seconds = 60, target = 5, onDone } = {}
   interval = setInterval(() => {
     if (finished) return;
     left -= 1;
+    if (left <= 3 && left > 0) {
+      audioEngine.playCountdownTick(left);
+    }
     if (left <= 0) {
       left = 0;
       clearInterval(interval);
+      audioEngine.playRestComplete();
       if (!finished) {
         finished = true;
+        if (count >= target) audioEngine.playExerciseComplete();
         modal.close();
         onDone?.({ count, seconds });
         return;

@@ -2,6 +2,9 @@ const { app, BrowserWindow, ipcMain, session, shell, Menu, dialog, screen } = re
 const path = require('node:path');
 const fsp = require('node:fs/promises');
 const fs = require('node:fs');
+const os = require('node:os');
+const { randomUUID } = require('node:crypto');
+const { spawn } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
 const IS_SHOT = Boolean(process.env.CHUNK_SHOT_DIR);
@@ -15,10 +18,125 @@ const STATE_FILE = path.join(USER_DIR, 'progress.json');
 const BACKUP_DIR = path.join(USER_DIR, 'backups');
 const WINDOW_FILE = path.join(USER_DIR, 'window.json');
 const DATA_FILE = path.join(ROOT, 'data', 'chunks.json');
+const WHISPER_DIR = path.join(USER_DIR, 'whisper');
+
+const WHISPER_MODELS = {
+  base: {
+    id: 'base',
+    name: 'ggml-base.bin',
+    label: 'النموذج الخفيف والسريع (Base)',
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+    expectedBytes: 147951465,
+    minBytes: 100 * 1024 * 1024,
+    description: 'خفيف (~142 MB)، سريع جداً، مناسب للأجهزة المتوسطة واللابتوبات العادية (رام 4-8 GB).'
+  },
+  turbo: {
+    id: 'turbo',
+    name: 'ggml-large-v3-turbo.bin',
+    label: 'النموذج الاحترافي فائق الدقة (Large v3 Turbo)',
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
+    expectedBytes: 1624555275,
+    minBytes: 500 * 1024 * 1024,
+    description: 'دقة فائقة (~1.5 GB)، يحتاج جهاز قوي (رام 8GB+ ومساحة كافية).'
+  }
+};
+
+let activeDownload = null;
+
+function resolveWhisperPaths() {
+  const candidateBins = [
+    path.join(__dirname, 'whisper-bin'),
+    path.join(USER_DIR, 'whisper', 'bin'),
+    path.join(ROOT, 'electron', 'whisper-bin'),
+  ];
+  let binDir = candidateBins[0];
+  let hasTools = false;
+  for (const dir of candidateBins) {
+    const ff = path.join(dir, 'ffmpeg.exe');
+    const wh = path.join(dir, 'whisper-cli.exe');
+    if (fs.existsSync(ff) && fs.existsSync(wh)) {
+      binDir = dir;
+      hasTools = true;
+      break;
+    }
+  }
+
+  let activeModel = null;
+  const modelsStatus = {};
+  for (const key of ['turbo', 'base']) {
+    const m = WHISPER_MODELS[key];
+    const filePath = path.join(WHISPER_DIR, m.name);
+    let size = 0;
+    let installed = false;
+    try {
+      const st = fs.statSync(filePath);
+      if (st.isFile() && st.size >= m.minBytes) {
+        installed = true;
+        size = st.size;
+        if (!activeModel) {
+          activeModel = { ...m, file: filePath, size };
+        }
+      }
+    } catch {}
+    modelsStatus[key] = {
+      ...m,
+      installed,
+      size,
+      filePath
+    };
+  }
+
+  return {
+    binDir,
+    hasTools,
+    ffmpegPath: path.join(binDir, 'ffmpeg.exe'),
+    whisperPath: path.join(binDir, 'whisper-cli.exe'),
+    activeModel,
+    modelsStatus,
+    whisperDir: WHISPER_DIR,
+  };
+}
 
 let win = null;
 let lastBackupAt = 0;
 let writeChain = Promise.resolve();
+let transcriptionJob = null;
+
+function runHidden(executable, args, job, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let errorText = '';
+    let timedOut = false;
+    const child = spawn(executable, args, {
+      cwd: path.dirname(executable),
+      windowsHide: true,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    job.child = child;
+    child.stderr.on('data', (part) => {
+      errorText = (errorText + part.toString('utf8')).slice(-4000);
+    });
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      job.child = null;
+      if (timedOut) reject(new Error('timeout'));
+      else if (job.cancelled) reject(new Error('cancelled'));
+      else if (code !== 0) reject(new Error(`tool-failed: ${errorText}`));
+      else resolve();
+    });
+  });
+}
+
+function trustedRenderer(event) {
+  return win && event.sender === win.webContents && event.senderFrame === win.webContents.mainFrame;
+}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -64,6 +182,182 @@ async function snapshotBackup() {
 }
 
 function registerIpc() {
+  ipcMain.handle('whisper:status', async () => {
+    const paths = resolveWhisperPaths();
+    return {
+      ok: true,
+      hasTools: paths.hasTools,
+      hasModel: Boolean(paths.activeModel),
+      activeModel: paths.activeModel ? {
+        id: paths.activeModel.id,
+        name: paths.activeModel.name,
+        label: paths.activeModel.label,
+        sizeMB: Math.round(paths.activeModel.size / (1024 * 1024)),
+      } : null,
+      models: paths.modelsStatus,
+      binDir: paths.binDir,
+      whisperDir: paths.whisperDir,
+      specs: {
+        cpus: os.cpus().length,
+        totalMemGB: Math.round(os.totalmem() / (1024 * 1024 * 1024)),
+        freeMemGB: Math.round(os.freemem() / (1024 * 1024 * 1024)),
+        platform: process.platform,
+        arch: process.arch,
+      },
+      downloading: activeDownload ? {
+        modelId: activeDownload.modelId,
+        percent: activeDownload.percent,
+        loaded: activeDownload.loaded,
+        total: activeDownload.total,
+      } : null,
+    };
+  });
+
+  ipcMain.handle('whisper:download', async (event, modelKey = 'base') => {
+    if (!trustedRenderer(event)) return { ok: false, error: 'untrusted' };
+    if (activeDownload) return { ok: false, error: 'busy' };
+    const targetModel = WHISPER_MODELS[modelKey] || WHISPER_MODELS.base;
+    await fsp.mkdir(WHISPER_DIR, { recursive: true });
+
+    const targetFile = path.join(WHISPER_DIR, targetModel.name);
+    const tempFile = `${targetFile}.part`;
+
+    const controller = new AbortController();
+    activeDownload = {
+      modelId: targetModel.id,
+      controller,
+      percent: 0,
+      loaded: 0,
+      total: targetModel.expectedBytes,
+    };
+
+    try {
+      const res = await fetch(targetModel.url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'ChunkTrainer-Downloader' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const total = Number(res.headers.get('content-length')) || targetModel.expectedBytes;
+      activeDownload.total = total;
+
+      const fileHandle = await fsp.open(tempFile, 'w');
+      let loaded = 0;
+      let lastEmit = Date.now();
+
+      const reader = res.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await fileHandle.write(value);
+        loaded += value.length;
+        activeDownload.loaded = loaded;
+        activeDownload.percent = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+
+        const now = Date.now();
+        if (now - lastEmit > 200 || loaded === total) {
+          lastEmit = now;
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('whisper:download-progress', {
+              modelId: targetModel.id,
+              loaded,
+              total,
+              percent: activeDownload.percent,
+            });
+          }
+        }
+      }
+      await fileHandle.close();
+      await fsp.rename(tempFile, targetFile);
+
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('whisper:download-complete', {
+          modelId: targetModel.id,
+          success: true,
+        });
+      }
+      return { ok: true, modelId: targetModel.id };
+    } catch (err) {
+      await fsp.rm(tempFile, { force: true }).catch(() => {});
+      if (err.name === 'AbortError') {
+        return { ok: false, error: 'cancelled' };
+      }
+      console.error('Whisper download failed:', err.message);
+      return { ok: false, error: err.message };
+    } finally {
+      activeDownload = null;
+    }
+  });
+
+  ipcMain.handle('whisper:cancel-download', (event) => {
+    if (!trustedRenderer(event)) return { ok: false };
+    if (activeDownload) {
+      activeDownload.controller.abort();
+      activeDownload = null;
+      return { ok: true };
+    }
+    return { ok: false };
+  });
+
+  ipcMain.handle('whisper:delete-model', async (event, modelKey) => {
+    if (!trustedRenderer(event)) return { ok: false };
+    const targetModel = WHISPER_MODELS[modelKey];
+    if (!targetModel) return { ok: false, error: 'not-found' };
+    const filePath = path.join(WHISPER_DIR, targetModel.name);
+    await fsp.rm(filePath, { force: true });
+    return { ok: true };
+  });
+
+  ipcMain.handle('whisper:transcribe', async (event, audio) => {
+    if (!trustedRenderer(event)) return { ok: false, error: 'untrusted' };
+    if (transcriptionJob) return { ok: false, error: 'busy' };
+    const bytes = audio instanceof Uint8Array || audio instanceof ArrayBuffer ? Buffer.from(audio) : null;
+    if (!bytes || bytes.length < 1024 || bytes.length > 15 * 1024 * 1024) {
+      return { ok: false, error: 'bad-audio' };
+    }
+    const paths = resolveWhisperPaths();
+    if (!paths.hasTools) return { ok: false, error: 'tool-missing' };
+    if (!paths.activeModel) return { ok: false, error: 'model-missing' };
+
+    const id = randomUUID();
+    const input = path.join(WHISPER_DIR, `${id}.webm`);
+    const wav = path.join(WHISPER_DIR, `${id}.wav`);
+    const outputBase = path.join(WHISPER_DIR, id);
+    const output = `${outputBase}.txt`;
+    const job = { cancelled: false, child: null };
+    transcriptionJob = job;
+    try {
+      await fsp.mkdir(WHISPER_DIR, { recursive: true });
+      await fsp.writeFile(input, bytes, { flag: 'wx' });
+      await runHidden(paths.ffmpegPath, ['-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', input,
+        '-t', '32', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wav], job, 30000);
+      if (job.cancelled) return { ok: false, error: 'cancelled' };
+      const threads = Math.max(2, Math.min(8, Math.floor(os.cpus().length / 2)));
+      await runHidden(paths.whisperPath, ['--model', paths.activeModel.file, '--file', wav, '--language', 'de',
+        '--threads', String(threads), '--beam-size', '5', '--no-timestamps', '--output-txt',
+        '--output-file', outputBase], job, 300000);
+      if (job.cancelled) return { ok: false, error: 'cancelled' };
+      const text = (await fsp.readFile(output, 'utf8')).trim();
+      return text ? { ok: true, text } : { ok: false, error: 'empty' };
+    } catch (error) {
+      if (job.cancelled) return { ok: false, error: 'cancelled' };
+      if (error.message === 'timeout') return { ok: false, error: 'timeout' };
+      console.error('whisper transcription failed:', error.message);
+      return { ok: false, error: 'failed' };
+    } finally {
+      transcriptionJob = null;
+      await Promise.all([input, wav, output].map((file) => fsp.rm(file, { force: true }).catch(() => {})));
+    }
+  });
+
+  ipcMain.handle('whisper:cancel', (event) => {
+    if (!trustedRenderer(event)) return { ok: false };
+    if (transcriptionJob) {
+      transcriptionJob.cancelled = true;
+      transcriptionJob.child?.kill();
+    }
+    return { ok: true };
+  });
+
   ipcMain.handle('data:chunks', async () => readJson(DATA_FILE));
 
   ipcMain.handle('state:load', async () => {
@@ -286,6 +580,13 @@ async function cleanStaleTemps() {
   } catch {
     /* first run: folder may not exist yet */
   }
+  try {
+    const files = await fsp.readdir(WHISPER_DIR);
+    await Promise.all(files.filter((file) => /^[0-9a-f-]{36}\.(webm|wav|txt)$/.test(file))
+      .map((file) => fsp.rm(path.join(WHISPER_DIR, file), { force: true })));
+  } catch {
+    /* no previous transcription */
+  }
 }
 
 const hasLock = app.requestSingleInstanceLock();
@@ -312,6 +613,7 @@ if (!hasLock) {
   });
 
   app.on('window-all-closed', () => app.quit());
+  app.on('before-quit', () => transcriptionJob?.child?.kill());
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

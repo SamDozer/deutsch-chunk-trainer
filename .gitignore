@@ -1,12 +1,22 @@
+# Dependencies (install with npm install)
 node_modules/
-shots/
+
+# Heavy binaries (contains ffmpeg.exe 217 MB which exceeds GitHub's 100MB hard limit)
+# Distribute via GitHub Releases or download script
+electron/whisper-bin/
+
+# Build artifacts & package outputs
 dist/
-dist-portable/
+out/
+build/
+*.exe
+
+# Logs & temp files
 *.log
-electron-out.log
-electron-err.log
-out2.log
-err2.log
-*.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
 .DS_Store
 Thumbs.db

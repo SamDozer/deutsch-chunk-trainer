@@ -1,16 +1,18 @@
 {
   "name": "chunk-trainer",
   "productName": "دفتر الشانكس",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "مدرب الشانكس الألمانية — 1500 جملة من A1 إلى C1 بمسار من 6 خطوات وحفظ تلقائي للتقدم",
   "main": "electron/main.cjs",
   "scripts": {
     "start": "electron .",
+    "build:exe": "electron-builder --win nsis --x64",
+    "build:portable": "electron-builder --win portable --x64",
+    "setup:whisper": "powershell -ExecutionPolicy Bypass -File scripts/setup-whisper.ps1",
     "parse": "node scripts/parse-chunks.mjs",
     "fonts": "node scripts/fetch-fonts.mjs",
     "preview": "node scripts/preview.mjs",
-    "test:ui": "node scripts/visual-test.mjs",
-    "build:win": "electron-builder --win --x64 --publish never"
+    "test:ui": "node scripts/visual-test.mjs"
   },
   "author": "Abdo",
   "license": "MIT",
@@ -18,56 +20,47 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "electron": "^45.3.1",
-    "electron-builder": "26.18.1",
-    "playwright-core": "^1.56.0"
+    "electron": "^38.0.0",
+    "electron-builder": "^26.18.0",
+    "playwright-core": "^1.56.0",
+    "rcedit": "^5.0.2"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/abdoabdo22334456-prog/deutsch-chunk-trainer.git"
+  "dependencies": {
+    "snd-lib": "^1.2.4",
+    "tone": "^15.1.22"
   },
-  "homepage": "https://github.com/abdoabdo22334456-prog/deutsch-chunk-trainer#readme",
-  "bugs": {
-    "url": "https://github.com/abdoabdo22334456-prog/deutsch-chunk-trainer/issues"
-  },
-  "keywords": [
-    "german",
-    "language-learning",
-    "spaced-repetition",
-    "electron",
-    "arabic",
-    "rtl",
-    "offline",
-    "education"
-  ],
   "build": {
     "appId": "com.abdo.chunktrainer",
-    "productName": "ChunkTrainer",
-    "asar": true,
+    "productName": "دفتر الشانكس",
     "directories": {
       "output": "dist"
     },
-    "files": [
-      "assets/**",
-      "data/**",
-      "electron/**",
-      "src/**",
-      "package.json"
-    ],
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/icon.ico",
-      "executableName": "ChunkTrainer"
+      "artifactName": "ChunkTrainer-Setup-${version}.${ext}"
     },
     "nsis": {
-      "artifactName": "ChunkTrainer-Setup-${version}-${arch}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
       "shortcutName": "دفتر الشانكس"
     },
-    "portable": {
-      "artifactName": "ChunkTrainer-Portable-${version}-${arch}.${ext}"
-    }
+    "files": [
+      "src/**/*",
+      "data/**/*",
+      "assets/**/*",
+      "electron/main.cjs",
+      "electron/preload.cjs",
+      "package.json"
+    ]
   }
 }

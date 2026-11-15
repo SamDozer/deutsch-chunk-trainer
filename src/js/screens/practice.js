@@ -23,6 +23,8 @@ import {
 } from '../utils.js';
 import { toast, confirmDialog, openModal } from '../ui.js';
 import { openRecallDrill, openSprintDrill, openSpeakingDrill } from '../drills.js';
+import { audioEngine } from '../audioEngine.js';
+import { trophyManager } from '../trophies.js';
 
 const RING_R = 46;
 const RING_C = 2 * Math.PI * RING_R;
@@ -287,6 +289,7 @@ function stepVary(chunk, local) {
   const rec = store.record(chunk.id);
   const coverage = store.variationCoverage(chunk.id);
   const siblings = store.siblings(chunk.id, 3);
+  const voice = local.voice;
 
   return html`
     ${stepHead(4, 'غيّر كل مرة', 'نفس القالب، أربع تغييرات: الفاعل، الزمن، الكلمات، والموقف.')}
@@ -297,7 +300,7 @@ function stepVary(chunk, local) {
       </div>
       <div class="produce-copy">
         <strong>${coverage >= 4 ? 'غطيت المحاور الأربعة' : `فاضل ${4 - coverage} محاور`}</strong>
-        <span>اكتب الجملة اللي أنتجتها في كل خانة. اكتب بالألماني، وممكن تضيف معناها بالعربي.</span>
+        <span>اكتب الجملة بالألماني أو انطقها بالمايك، راجع النص، وبعدها سجّل التنويع.</span>
       </div>
     </div>
 
@@ -311,10 +314,25 @@ function stepVary(chunk, local) {
               <span class="counter-badge ${items.length ? 'is-full' : ''}">${items.length}</span>
             </div>
             <span class="axis-hint">${axis.hint}</span>
-            <textarea data-draft="${axis.key}" dir="auto" placeholder="اكتب جملة واحدة على الأقل...">${local.drafts[axis.key] || ''}</textarea>
-            <button class="btn btn-ghost btn-sm" data-act="vary:save" data-axis="${axis.key}" style="align-self:flex-start;margin-top:6px">
-              ${icon('check')} سجّل التنويع
-            </button>
+            <textarea data-draft="${axis.key}" dir="auto" placeholder="اكتب جملة أو انطقها بالألماني..." ${voice.axis === axis.key && voice.state !== 'idle' ? 'readonly' : ''}>${local.drafts[axis.key] || ''}</textarea>
+            <div class="axis-actions">
+              <button class="btn btn-ghost btn-sm" data-act="vary:save" data-axis="${axis.key}" ${voice.axis === axis.key && voice.state !== 'idle' ? 'disabled' : ''}>
+                ${icon('check')} سجّل التنويع
+              </button>
+              <button class="btn btn-ghost btn-sm axis-voice-btn ${voice.axis === axis.key && voice.state === 'recording' ? 'is-recording' : ''}"
+                data-act="vary:voice" data-axis="${axis.key}" ${voice.state !== 'idle' && voice.axis !== axis.key ? 'disabled' : ''}
+                aria-label="${voice.axis === axis.key && voice.state === 'recording' ? 'إيقاف التسجيل' : voice.axis === axis.key && voice.state === 'processing' ? 'إلغاء التفريغ' : `سجّل جملة صوتية في ${axis.title}`}"
+                aria-pressed="${voice.axis === axis.key && voice.state === 'recording' ? 'true' : 'false'}">
+                ${voice.axis === axis.key && voice.state === 'processing' ? icon('close') : icon('mic')}
+                ${voice.axis === axis.key && voice.state === 'recording' ? 'إيقاف' : voice.axis === axis.key && voice.state === 'processing' ? 'إلغاء' : 'اتكلم بالألماني'}
+              </button>
+            </div>
+            ${voice.axis === axis.key && voice.state !== 'idle'
+              ? html`<div class="axis-voice-status ${voice.state}" role="status" aria-live="polite">
+                  <span class="axis-voice-indicator"></span>
+                  ${voice.state === 'recording' ? 'بيتسجّل صوتك... اضغط إيقاف لما تخلص (حد أقصى 30 ثانية).' : 'Whisper بيحوّل صوتك لنص ألماني... ممكن ياخد شوية وقت.'}
+                </div>`
+              : ''}
           </div>
         `;
       })}
@@ -381,6 +399,23 @@ function stepTest(chunk) {
         <span>الاستدعاء والسرعة والكلام والتنويع شرط أساسي للإتقان المبدئي. الاستدعاء المؤجل يأتي بعد أسبوع في جدول المراجعة.</span>
       </div>
     </div>
+
+    ${passedCount === 4
+      ? html`
+          <div class="callout" style="background:var(--card-2);border-inline-start-color:var(--yellow);margin-top:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:24px">🎉</span>
+              <div>
+                <strong>اجتزت كل الاختبارات الفورية بنجاح!</strong>
+                <p style="margin:2px 0 0;font-size:12px;color:var(--muted)">تقدر دلوقتي تعتبر الجملة متقنة وتشوف ملخص نقاط الإتقان (XP).</p>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" data-act="summary:view">
+              ${icon('trophy')} اعتبره متقن وشوف ملخص الـ XP
+            </button>
+          </div>
+        `
+      : ''}
 
     <div class="test-grid">
       <div class="test-card ${recall.passed ? 'is-done' : ''}">
@@ -509,7 +544,10 @@ function stepMastery(chunk, next) {
               <h3>الجملة متقنة ✓</h3>
               <p>${rec.mastery.at ? `اتقنت ${relativeWhen(rec.mastery.at)}` : ''} · المراجعة الجاية ${dueLabel(rec.review.due)}</p>
             </div>
-            ${next ? html`<a class="btn btn-primary" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها (${next.id}) ${icon('forward')}</a>` : ''}
+            <div class="row" style="margin-inline-start:auto;gap:8px">
+              <button class="btn btn-ghost btn-sm" data-act="summary:view">${icon('trophy')} ملخص الـ XP</button>
+              ${next ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها (${next.id}) ${icon('forward')}</a>` : ''}
+            </div>
           </div>
         `
       : ready
@@ -588,6 +626,7 @@ export const practiceScreen = {
     const cIndex = level?.chunks?.findIndex((c) => c.id === chunk.id) ?? -1;
     const prevC = cIndex > 0 ? level.chunks[cIndex - 1] : null;
     const nextC = cIndex >= 0 && cIndex < (level?.chunks?.length - 1) ? level.chunks[cIndex + 1] : null;
+    const rankInfo = trophyManager.getRankInfo();
 
     return html`
       <div class="page practice-page" style="--lv:var(--${chunk.level.toLowerCase()})">
@@ -600,6 +639,14 @@ export const practiceScreen = {
             <span class="dot-sep"></span>
             <span class="chip chip-yellow" style="font-size:11px">${phase.label}</span>
           </div>
+
+          <!-- Live XP Badge in Topbar -->
+          <div class="live-xp-pill" id="live-xp-pill" title="نقاط الإتقان الكلية والمكتسبة في هذه الجلسة">
+            <span class="live-xp-icon">${icon('spark')}</span>
+            <span class="live-xp-total"><b id="top-total-xp">${rankInfo.xp.toLocaleString()}</b> XP</span>
+            <span class="live-xp-session" id="top-session-xp">+0 في الجلسة</span>
+          </div>
+
           <div class="chunk-nav-seq" style="margin-inline-start:auto;display:flex;align-items:center;gap:6px">
             ${prevC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${prevC.id}?step=1" title="الجملة السابقة (${prevC.id})">${icon('back')} ${prevC.id}</a>` : ''}
             ${nextC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${nextC.id}?step=1" title="الجملة التالية (${nextC.id})">${nextC.id} ${icon('forward')}</a>` : ''}
@@ -611,6 +658,21 @@ export const practiceScreen = {
           <section class="step-panel" id="step-panel"></section>
 
           <aside class="practice-aside">
+            <!-- Live Session XP & Level Progress Card -->
+            <div class="session-xp-card" id="session-xp-card">
+              <div class="session-xp-row">
+                <span class="session-xp-rank">${rankInfo.current.icon} ${rankInfo.current.title}</span>
+                <span class="session-xp-counter" id="aside-session-xp">+0 XP</span>
+              </div>
+              <div class="session-xp-track">
+                <div class="session-xp-fill" id="aside-xp-fill" style="width:${rankInfo.progressPct}%"></div>
+              </div>
+              <div class="session-xp-sub">
+                <span>المستوى <b>${rankInfo.current.level}</b> من 50</span>
+                <span id="aside-xp-hint">${rankInfo.next ? `فاضل ${rankInfo.remainingXP.toLocaleString()} XP` : 'الرتبة القصوى 👑'}</span>
+              </div>
+            </div>
+
             <div class="rail-panel">
               <div class="rail-panel-title">مسار الجملة</div>
               <ul class="rail-steps" id="rail">${railMarkup(step)}</ul>
@@ -640,6 +702,8 @@ export const practiceScreen = {
     const startedAt = Date.now();
     const drafts = {};
     const local = { revealed: false, showMap: false };
+    const voice = { axis: '', state: 'idle', recorder: null, stream: null, timer: null, nonce: 0 };
+    let disposed = false;
     let step = clamp(Number(new URLSearchParams(location.hash.split('?')[1] || '').get('step')) || store.currentStep(chunk.id), 1, 6);
     let stream = null;
     let recorder = null;
@@ -666,9 +730,181 @@ export const practiceScreen = {
     const prev = prevChunk();
     const next = nextChunk();
 
+    // --- Live Gamification & Real-Time XP Engine ---
+    let sessionXPEarned = 0;
+    let initialRankInfo = trophyManager.getRankInfo();
+    let previousLevel = initialRankInfo.current.level;
+
+    const updateLiveCounters = () => {
+      const rank = trophyManager.getRankInfo();
+      const topTotal = root.querySelector('#top-total-xp');
+      const topSession = root.querySelector('#top-session-xp');
+      const asideSession = root.querySelector('#aside-session-xp');
+      const asideFill = root.querySelector('#aside-xp-fill');
+      const asideHint = root.querySelector('#aside-xp-hint');
+      const asideRank = root.querySelector('.session-xp-rank');
+
+      if (topTotal) topTotal.textContent = rank.xp.toLocaleString();
+      if (topSession) topSession.textContent = `+${sessionXPEarned} في الجلسة`;
+      if (asideSession) asideSession.textContent = `+${sessionXPEarned} XP`;
+      if (asideFill) asideFill.style.width = `${rank.progressPct}%`;
+      if (asideHint) {
+        asideHint.textContent = rank.next ? `فاضل ${rank.remainingXP.toLocaleString()} XP` : 'الرتبة القصوى 👑';
+      }
+      if (asideRank) {
+        asideRank.textContent = `${rank.current.icon} ${rank.current.title}`;
+      }
+
+      if (rank.current.level > previousLevel) {
+        const leveledUpTo = rank.current;
+        previousLevel = rank.current.level;
+        showLevelUpNotification(leveledUpTo);
+      }
+    };
+
+    const showXPToast = (amount, reason) => {
+      sessionXPEarned += amount;
+      audioEngine.playStepComplete(amount >= 20 ? 4 : 2);
+
+      // Create floating notification
+      const container = document.getElementById('toast-root') || root;
+      const toastEl = document.createElement('div');
+      toastEl.className = 'xp-floating-toast';
+      toastEl.innerHTML = `
+        <span class="xp-toast-spark">✨</span>
+        <strong class="xp-toast-amount">+${amount} XP</strong>
+        <span class="xp-toast-sep">·</span>
+        <span class="xp-toast-reason">${reason}</span>
+      `;
+      container.appendChild(toastEl);
+      setTimeout(() => {
+        toastEl.classList.add('is-floating-out');
+        setTimeout(() => toastEl.remove(), 400);
+      }, 2400);
+
+      updateLiveCounters();
+    };
+
+    const showLevelUpNotification = (newRank) => {
+      audioEngine.playNewPR();
+      toast(`🎉 مبروك! ارتقيت إلى المستوى ${newRank.level}: ${newRank.title}!`, 'spark');
+    };
+
+    const showCompletionSummaryModal = (targetChunk) => {
+      audioEngine.playWorkoutComplete();
+      const chunkXP = trophyManager.getChunkXPEarned(targetChunk.id);
+      const rankInfo = trophyManager.getRankInfo();
+      const nextC = next;
+
+      const praises = [
+        `عاش يا بطل! أداء استثنائي وتركيز عالي، جمعت ${chunkXP.total} XP وقربت خطوة كبيرة من المستوى اللي جاي!`,
+        `ما شاء الله عليك! نطق وإنتاج في الجون، الجملة دي ثبتت في دماغك خلاص، كمّل بنفس الحماس!`,
+        `شاطر جداً! جمعت ${chunkXP.total} XP كاملين في الجملة دي، مستواك في الألماني بيعلى خطوة بخطوة!`,
+        `الله ينور عليك! أتقنت القالب بكل تفاصيله واجتزت التحدي بنجاح، يلا على الجملة اللي بعدها!`,
+      ];
+      const praiseMsg = praises[Math.floor(Math.random() * praises.length)];
+
+      const modalContent = html`
+        <div class="completion-summary-modal" style="text-align:center;padding:16px 8px">
+          <div class="summary-trophy-badge">
+            <span class="summary-trophy-icon">${icon('trophy')}</span>
+          </div>
+
+          <span class="eyebrow" style="color:var(--yellow);margin-top:10px;display:inline-block">تم إتقان الجملة بنجاح ✓</span>
+          <h2 style="font-size:24px;margin:6px 0 2px">${targetChunk.de}</h2>
+          <p class="sub muted" style="margin-bottom:14px">${targetChunk.ar}</p>
+
+          <div class="summary-total-xp-banner">
+            <span class="summary-xp-kicker">مجموع نقاط الـ XP المكتسبة في الجملة</span>
+            <div class="summary-xp-number"><b>+${chunkXP.total}</b> <span>XP</span></div>
+          </div>
+
+          <div class="summary-breakdown-grid">
+            ${chunkXP.breakdown.map(
+              (item) => html`
+                <div class="summary-item-chip">
+                  <span class="item-icon">${icon(item.icon || 'check')}</span>
+                  <span class="item-lbl">${item.label}</span>
+                  <strong class="item-xp">+${item.xp} XP</strong>
+                </div>
+              `,
+            )}
+          </div>
+
+          <div class="summary-level-progress">
+            <div class="between" style="font-size:13px;margin-bottom:6px">
+              <span><b>${rankInfo.current.icon} ${rankInfo.current.title}</b> (المستوى ${rankInfo.current.level} من 50)</span>
+              <span><b>${rankInfo.xp.toLocaleString()}</b> XP إجمالي</span>
+            </div>
+            <div class="bento-bar"><span style="width:${rankInfo.progressPct}%"></span></div>
+            <div class="between" style="font-size:11px;color:var(--muted);margin-top:4px">
+              <span>نسبة إكمال المستوى ${rankInfo.progressPct}%</span>
+              <span>${rankInfo.next ? `فاضل ${rankInfo.remainingXP.toLocaleString()} XP للوصول لـ ${rankInfo.next.title}` : 'أعلى رتبة إتقان 🎉'}</span>
+            </div>
+          </div>
+
+          <div class="summary-egy-praise">
+            <p>${praiseMsg}</p>
+          </div>
+
+          <div class="modal-actions" style="justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap">
+            ${nextC ? html`<button class="btn btn-primary" data-act-next-chunk>الجملة التالية (${nextC.id}) ${icon('forward')}</button>` : ''}
+            <a class="btn btn-ghost" href="#/level/${targetChunk.level}">العودة للمستويات</a>
+            <a class="btn btn-quiet" href="#/trophies">${icon('trophy')} خزانة الإنجازات</a>
+          </div>
+        </div>
+      `;
+
+      const modal = openModal(modalContent, {
+        className: 'summary-dialog-window',
+      });
+
+      modal.root.querySelector('[data-act-next-chunk]')?.addEventListener('click', () => {
+        audioEngine.playTap();
+        modal.close();
+        if (nextC) {
+          location.hash = `#/practice/${nextC.id}?step=1`;
+        }
+      });
+    };
+
+    const checkStep5Completion = () => {
+      const r = store.record(chunk.id);
+      const vCount = r.vary?.items?.length || (r.vary?.importedDone ? 5 : 0);
+      const immediateTestsPassed = Boolean(
+        r.test?.recall?.passed &&
+        vCount >= 5 &&
+        r.test?.sprint?.count >= 5 &&
+        r.test?.speaking?.seconds >= 30
+      );
+      if (immediateTestsPassed && !r.mastery?.done) {
+        store.completeMastery(chunk.id);
+        showXPToast(20, 'تاج الإتقان المعتمد — الجملة متقنة');
+        setTimeout(() => {
+          showCompletionSummaryModal(chunk);
+        }, 500);
+      }
+    };
+
     const setSaveFlag = (state = 'saved') => {
       saveflag.classList.toggle('is-saving', state === 'saving');
       saveflag.textContent = state === 'saving' ? 'بيتحفظ...' : 'محفوظ تلقائيًا';
+    };
+
+    const cancelVoice = () => {
+      const wasProcessing = voice.state === 'processing';
+      voice.nonce += 1;
+      clearTimeout(voice.timer);
+      if (voice.recorder?.state === 'recording') {
+        voice.recorder.onstop = null;
+        voice.recorder.stop();
+      }
+      voice.stream?.getTracks().forEach((track) => track.stop());
+      voice.recorder = null;
+      voice.stream = null;
+      voice.axis = '';
+      voice.state = 'idle';
+      if (wasProcessing) window.chunkAPI.cancelTranscription().catch(() => {});
     };
 
     const paint = () => {
@@ -676,7 +912,7 @@ export const practiceScreen = {
       if (step === 1) panel.innerHTML = String(stepUnderstand(chunk, local));
       else if (step === 2) panel.innerHTML = String(stepSpeak(chunk, local));
       else if (step === 3) panel.innerHTML = String(stepProduce(chunk, local));
-      else if (step === 4) panel.innerHTML = String(stepVary(chunk, { drafts }));
+      else if (step === 4) panel.innerHTML = String(stepVary(chunk, { drafts, voice }));
       else if (step === 5) panel.innerHTML = String(stepTest(chunk));
       else panel.innerHTML = String(stepMastery(chunk, next));
 
@@ -704,7 +940,14 @@ export const practiceScreen = {
     `;
 
     const goToStep = (target) => {
-      step = clamp(target, 1, 6);
+      if (step === 4 && target !== 4) cancelVoice();
+      const nextStep = clamp(target, 1, 6);
+      if (nextStep > step) {
+        audioEngine.playStepComplete(nextStep);
+      } else if (nextStep < step) {
+        audioEngine.playStepper('down');
+      }
+      step = nextStep;
       local.revealed = false;
       local.showMap = false;
       paint();
@@ -766,6 +1009,7 @@ export const practiceScreen = {
           if (recUrl) URL.revokeObjectURL(recUrl);
           recUrl = URL.createObjectURL(new Blob(chunks, { type: 'audio/webm' }));
           renderAudio();
+          showXPToast(5, 'سجلت نطقك وقارنته بالصوت الأصلي');
           toast('اتسجل — اسمعه وقارنه', 'mic');
         };
         recorder.start();
@@ -773,6 +1017,108 @@ export const practiceScreen = {
         button.innerHTML = String(html`${icon('close')} وقّف التسجيل`);
         toast('بيتسجل... اتكلم عادي', 'mic');
       } catch (error) {
+        toast('مش قادر أوصل للمايك — اسمح بالوصول من إعدادات ويندوز', 'lock');
+      }
+    }
+
+    async function toggleVoice(axis) {
+      if (!VARIATION_AXES.some((item) => item.key === axis)) return;
+      if (voice.state === 'processing' && voice.axis === axis) {
+        cancelVoice();
+        paint();
+        return;
+      }
+      if (voice.state === 'recording' && voice.axis === axis) {
+        if (voice.recorder?.state === 'recording') voice.recorder.stop();
+        return;
+      }
+      if (voice.state !== 'idle') return;
+      if (!window.chunkAPI?.transcribeGermanAudio || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        toast('التسجيل الصوتي مش متاح على الجهاز ده', 'mic');
+        return;
+      }
+
+      const nonce = ++voice.nonce;
+      let micStream = null;
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (disposed || step !== 4 || nonce !== voice.nonce) {
+          micStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        const mime = MediaRecorder.isTypeSupported?.('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus' : undefined;
+        const micRecorder = new MediaRecorder(micStream, mime ? { mimeType: mime } : undefined);
+        const pieces = [];
+        voice.axis = axis;
+        voice.state = 'recording';
+        voice.recorder = micRecorder;
+        voice.stream = micStream;
+        micRecorder.ondataavailable = (event) => {
+          if (event.data?.size) pieces.push(event.data);
+        };
+        micRecorder.onerror = () => {
+          if (nonce !== voice.nonce) return;
+          cancelVoice();
+          paint();
+          toast('حصلت مشكلة أثناء التسجيل — جرّب تاني', 'mic');
+        };
+        micRecorder.onstop = async () => {
+          clearTimeout(voice.timer);
+          micStream.getTracks().forEach((track) => track.stop());
+          if (nonce !== voice.nonce || disposed || step !== 4) return;
+          voice.recorder = null;
+          voice.stream = null;
+          if (!pieces.length) {
+            voice.state = 'idle';
+            voice.axis = '';
+            paint();
+            toast('التسجيل فاضي — جرّب تاني', 'mic');
+            return;
+          }
+          voice.state = 'processing';
+          paint();
+          try {
+            const bytes = new Uint8Array(await new Blob(pieces, { type: mime || micRecorder.mimeType }).arrayBuffer());
+            const result = await window.chunkAPI.transcribeGermanAudio(bytes);
+            if (nonce !== voice.nonce || disposed || step !== 4) return;
+            voice.state = 'idle';
+            voice.axis = '';
+            if (result?.ok && result.text?.trim()) {
+              drafts[axis] = [drafts[axis]?.trim(), result.text.trim()].filter(Boolean).join(' ');
+              paint();
+              panel.querySelector(`[data-draft="${axis}"]`)?.focus();
+              toast('النص الألماني جاهز — راجعه وبعدين سجّله', 'check');
+            } else {
+              paint();
+              const messages = {
+                'model-missing': 'نموذج Whisper مش جاهز على الجهاز',
+                'tool-missing': 'ملفات Whisper مش جاهزة',
+                'bad-audio': 'التسجيل قصير أو غير صالح — جرّب تاني',
+                empty: 'ما اتسمعش كلام واضح — جرّب تاني',
+                timeout: 'التفريغ طول أكتر من المتوقع — جرّب تسجيل أقصر',
+                busy: 'Whisper مشغول بتسجيل تاني',
+              };
+              if (result?.error !== 'cancelled') toast(messages[result?.error] || 'تعذّر تحويل الصوت — جرّب تاني', 'mic');
+            }
+          } catch {
+            if (nonce !== voice.nonce || disposed) return;
+            voice.state = 'idle';
+            voice.axis = '';
+            paint();
+            toast('تعذّر تحويل الصوت — جرّب تاني', 'mic');
+          }
+        };
+        micRecorder.start();
+        voice.timer = setTimeout(() => {
+          if (micRecorder.state === 'recording') micRecorder.stop();
+        }, 30000);
+        paint();
+      } catch {
+        micStream?.getTracks().forEach((track) => track.stop());
+        if (nonce !== voice.nonce || disposed) return;
+        cancelVoice();
+        paint();
         toast('مش قادر أوصل للمايك — اسمح بالوصول من إعدادات ويندوز', 'lock');
       }
     }
@@ -809,14 +1155,32 @@ export const practiceScreen = {
           store.setUnderstandFunc(chunk.id, target.dataset.func);
           paint();
           break;
-        case 'understand:done':
+        case 'understand:done': {
+          const wasDone = rec.understand?.done;
           store.finishUnderstand(chunk.id);
+          if (!wasDone) {
+            showXPToast(10, 'فهمت الـChunk وحددت وظيفته');
+          }
           goToStep(2);
           break;
-        case 'speak:pass':
-          store.setSpeakPass(chunk.id, target.dataset.pass, !rec.speak.passes[target.dataset.pass]);
+        }
+        case 'speak:pass': {
+          const passKey = target.dataset.pass;
+          const passesBefore = { ...rec.speak?.passes };
+          store.setSpeakPass(chunk.id, passKey, !passesBefore[passKey]);
           paint();
+          const recAfter = store.record(chunk.id);
+          const allPassesAfter = recAfter.speak?.passes?.slow && recAfter.speak?.passes?.natural && recAfter.speak?.passes?.blind;
+          const allPassesBefore = passesBefore.slow && passesBefore.natural && passesBefore.blind;
+          if (recAfter.speak?.passes?.[passKey] && !passesBefore[passKey]) {
+            if (allPassesAfter && !allPassesBefore) {
+              showXPToast(15, 'أتممت خطوات النطق الثلاث بنجاح');
+            } else {
+              showXPToast(5, `نطقت الخطوة (${passKey === 'slow' ? 'ببطء' : passKey === 'natural' ? 'طبيعي' : 'من غير ما تبص'})`);
+            }
+          }
           break;
+        }
         case 'say':
           speak(Number(target.dataset.rate) || 0.95);
           break;
@@ -826,16 +1190,23 @@ export const practiceScreen = {
         case 'record':
           startRecording(target);
           break;
+        case 'vary:voice':
+          toggleVoice(target.dataset.axis);
+          break;
         case 'batch:log': {
           const index = Number(target.dataset.index);
           const batch = store.batchState(chunk.id)[index];
+          audioEngine.playStepper('up');
           store.addProduction(chunk.id, batch.amount);
+          showXPToast(20, `سجلت ${batch.amount} إنتاج — ${batch.label}`);
           toast(`سجلت ${batch.amount} إنتاج — ${batch.label}`, 'check');
           paint();
           break;
         }
         case 'batch:extra': {
+          audioEngine.playStepper('up');
           store.addProduction(chunk.id, 5);
+          showXPToast(10, 'سجلت 5 إنتاجات إضافية بنجاح ✓');
           toast('سجلت 5 إنتاجات إضافية بنجاح ✓', 'check');
           paint();
           break;
@@ -845,25 +1216,41 @@ export const practiceScreen = {
           const field = target.closest('.axis-card')?.querySelector('[data-draft]');
           const text = field?.value || drafts[axis] || '';
           if (!text.trim()) {
+            audioEngine.playSoftError();
             field?.setAttribute('aria-invalid', 'true');
             field?.focus();
             toast('اكتب جملة الأول', 'spark');
             return;
           }
+          audioEngine.playSetComplete(3);
+          const covBefore = store.variationCoverage(chunk.id);
           store.addVariation(chunk.id, axis, text);
           drafts[axis] = '';
+          const covAfter = store.variationCoverage(chunk.id);
+          if (covAfter >= 4 && covBefore < 4) {
+            showXPToast(15, 'سجلت تنويع جديد + بونص إكمال المحاور الأربعة (+10 XP)!');
+          } else {
+            showXPToast(5, `سجلت تنويع في محور ${store.axisTitle(axis)}`);
+          }
           paint();
           break;
         }
         case 'vary:del':
+          audioEngine.playSoftError();
           store.removeVariation(chunk.id, Number(target.dataset.index));
           paint();
           break;
         case 'recall:start':
           openRecallDrill(chunk, {
             onDone: ({ passed, score, total }) => {
+              const wasPassed = rec.test?.recall?.passed;
               store.setRecall(chunk.id, score, total);
-              toast(passed ? 'استدعاء ممتاز' : `جبت ${score} من ${total} — جرّب تاني`, passed ? 'check' : 'clock');
+              if (passed && !wasPassed) {
+                showXPToast(25, `اجتزت الاستدعاء السريع بنجاح (${score} من ${total})`);
+              } else {
+                toast(passed ? 'استدعاء ممتاز' : `جبت ${score} من ${total} — جرّب تاني`, passed ? 'check' : 'clock');
+              }
+              checkStep5Completion();
               paint();
             },
           });
@@ -871,8 +1258,14 @@ export const practiceScreen = {
         case 'sprint:start':
           openSprintDrill(chunk, {
             onDone: ({ count }) => {
+              const countBefore = rec.test?.sprint?.count || 0;
               store.setSprint(chunk.id, count);
-              toast(`سجلت ${count} جمل في الدقيقة`, count >= 5 ? 'check' : 'clock');
+              if (count >= 5 && countBefore < 5) {
+                showXPToast(15, `بونص سرعة سبرنت الدقيقة (${count} جمل/دقيقة)!`);
+              } else {
+                toast(`سجلت ${count} جمل في الدقيقة`, count >= 5 ? 'check' : 'clock');
+              }
+              checkStep5Completion();
               paint();
             },
           });
@@ -880,14 +1273,21 @@ export const practiceScreen = {
         case 'speaking:start':
           openSpeakingDrill(chunk, {
             onDone: ({ seconds, note }) => {
+              const secondsBefore = rec.test?.speaking?.seconds || 0;
               store.setSpeaking(chunk.id, seconds, note);
-              toast('اتسجل الكلام المرتجل', 'check');
+              if (seconds >= 30 && secondsBefore < 30) {
+                showXPToast(10, `بونص الكلام المرتجل (${Math.round(seconds)} ثانية)!`);
+              } else {
+                toast('اتسجل الكلام المرتجل', 'check');
+              }
+              checkStep5Completion();
               paint();
             },
           });
           break;
         case 'delayed:start':
           if (!store.delayedReady(chunk.id)) {
+            audioEngine.playSoftError();
             toast('الاستدعاء المؤجل هيفتح بعد أسبوع من خطوة التنويع', 'clock');
             return;
           }
@@ -895,6 +1295,7 @@ export const practiceScreen = {
             onDone: ({ passed, score, total }) => {
               if (passed) {
                 store.setDelayed(chunk.id, true, score);
+                showXPToast(25, 'اجتزت الاستدعاء المؤجل لتثبيت الذاكرة');
                 toast('الاستدعاء المؤجل عدّى — الشروط كاملة', 'trophy');
               } else {
                 toast(`جبت ${score} من ${total} — راجع الجملة وحاول بعد يوم`, 'clock');
@@ -903,12 +1304,25 @@ export const practiceScreen = {
             },
           });
           break;
-        case 'mastery:complete':
+        case 'summary:view': {
+          if (!store.peek(chunk.id)?.mastery?.done) {
+            store.completeMastery(chunk.id);
+            showXPToast(20, 'تاج الإتقان المعتمد — الجملة متقنة');
+          }
+          paint();
+          showCompletionSummaryModal(chunk);
+          break;
+        }
+        case 'mastery:complete': {
           if (store.completeMastery(chunk.id)) {
-            toast('الجملة دخلت جدول المراجعة ✓', 'trophy');
+            showXPToast(20, 'تاج الإتقان المعتمد — الجملة متقنة');
             paint();
+            setTimeout(() => {
+              showCompletionSummaryModal(chunk);
+            }, 300);
           }
           break;
+        }
         case 'go-step':
           goToStep(Number(target.dataset.step));
           break;
@@ -966,6 +1380,7 @@ export const practiceScreen = {
           if (closed) return;
           closed = true;
           store.setSpeakPass(chunk.id, 'blind', true);
+          showXPToast(10, 'نطقت الجملة صح من غير ما تبص!');
           modal.close();
           paint();
           toast('تمام — الجملة خرجت من غير ما تبص', 'check');
@@ -1033,6 +1448,8 @@ export const practiceScreen = {
     window.speechSynthesis?.addEventListener?.('voiceschanged', onVoices);
 
     return () => {
+      disposed = true;
+      cancelVoice();
       clearInterval(clockTick);
       clearInterval(heartbeat);
       document.removeEventListener('keydown', onKey);
