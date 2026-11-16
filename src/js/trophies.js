@@ -80,8 +80,9 @@ export const BADGES = [
     icon: 'target',
     xp: 200,
     check: (s) => {
-      const total = Object.values(s.chunks || {}).reduce((sum, c) => sum + (c.vary?.items?.length || 0), 0);
-      return total >= 20;
+      const chunkTotal = Object.values(s.chunks || {}).reduce((sum, c) => sum + (c.vary?.items?.length || 0), 0);
+      const groupTotal = Object.values(s.groups || {}).reduce((sum, g) => sum + (g.variations?.length || (g.done ? 5 : 0)), 0);
+      return (chunkTotal + groupTotal) >= 20;
     },
   },
   {
@@ -92,8 +93,51 @@ export const BADGES = [
     icon: 'target',
     xp: 600,
     check: (s) => {
-      const total = Object.values(s.chunks || {}).reduce((sum, c) => sum + (c.vary?.items?.length || 0), 0);
-      return total >= 100;
+      const chunkTotal = Object.values(s.chunks || {}).reduce((sum, c) => sum + (c.vary?.items?.length || 0), 0);
+      const groupTotal = Object.values(s.groups || {}).reduce((sum, g) => sum + (g.variations?.length || (g.done ? 5 : 0)), 0);
+      return (chunkTotal + groupTotal) >= 100;
+    },
+  },
+  {
+    id: 'group_first_vary',
+    category: 'practice',
+    title: 'قالب متجدد',
+    desc: 'أنجزت شرط الـ 5 تنويعات لأول مجموعة قوالب بنجاح.',
+    icon: 'target',
+    xp: 100,
+    check: (s) => Object.values(s.groups || {}).some((g) => g.done || (g.variations?.length || 0) >= 5),
+  },
+  {
+    id: 'group_first_mastery',
+    category: 'mastery',
+    title: 'مجموعة متقنة',
+    desc: 'أتقنت جميع جمل أول مجموعة قوالب بالكامل.',
+    icon: 'trophy',
+    xp: 150,
+    check: () => {
+      if (!store.levels) return false;
+      for (const level of store.levels) {
+        const groups = store.getGroups(level.id);
+        if (groups.some((g) => g.isMastered)) return true;
+      }
+      return false;
+    },
+  },
+  {
+    id: 'group_master_10',
+    category: 'mastery',
+    title: 'كتيبة القوالب',
+    desc: 'أتقنت 10 مجموعات قوالب كاملة باحترافية وتلقائية.',
+    icon: 'trophy',
+    xp: 500,
+    check: () => {
+      if (!store.levels) return false;
+      let count = 0;
+      for (const level of store.levels) {
+        const groups = store.getGroups(level.id);
+        count += groups.filter((g) => g.isMastered).length;
+      }
+      return count >= 10;
     },
   },
   {
@@ -484,6 +528,25 @@ export class TrophyManager {
       if (chunk.mastery?.done) xp += 20;
     }
 
+    // Group Variations Bonus: +50 XP per group with 5 variations completed
+    for (const group of Object.values(s.groups || {})) {
+      if (group.done || (group.variations?.length || 0) >= 5) {
+        xp += 50;
+      }
+    }
+
+    // Group Full Mastery Bonus: +100 XP per fully mastered group
+    if (store.levels) {
+      for (const level of store.levels) {
+        const groups = store.getGroups(level.id);
+        for (const grp of groups) {
+          if (grp.isMastered) {
+            xp += 100;
+          }
+        }
+      }
+    }
+
     // Spaced Repetition Reviews: +15 XP each
     const reviewsCount = (s.reviews || []).length;
     xp += reviewsCount * 15;
@@ -504,17 +567,20 @@ export class TrophyManager {
 
   // Itemized breakdown of XP earned specifically on a single chunk
   getChunkXPEarned(chunkId) {
-    const chunk = store.peek(chunkId);
-    if (!chunk) return { total: 0, breakdown: [] };
+    const rec = store.peek(chunkId);
+    const groupPos = store.getGroupPosition(chunkId);
+    if (!rec && !groupPos?.group?.variationDone && !groupPos?.group?.isMastered) {
+      return { total: 0, breakdown: [] };
+    }
     const breakdown = [];
     let total = 0;
 
-    if (chunk.understand?.done) {
+    if (rec?.understand?.done) {
       breakdown.push({ label: 'فهم الجملة وتحديد وظيفتها', xp: 10, icon: 'eye' });
       total += 10;
     }
 
-    const sp = chunk.speak?.passes;
+    const sp = rec?.speak?.passes;
     let speakXP = 0;
     if (sp?.slow) speakXP += 5;
     if (sp?.natural) speakXP += 5;
@@ -524,7 +590,7 @@ export class TrophyManager {
       total += speakXP;
     }
 
-    const totalProd = chunk.produce?.total || 0;
+    const totalProd = rec?.produce?.total || 0;
     const prodXP = totalProd >= 10 ? 20 : totalProd * 2;
     if (prodXP > 0) {
       breakdown.push({ label: `إنتاج الجمل (${totalProd} من 30)`, xp: prodXP, icon: 'check' });
@@ -532,11 +598,11 @@ export class TrophyManager {
     }
 
     let varyXP = 0;
-    if (chunk.vary?.importedDone) {
+    if (rec?.vary?.importedDone) {
       varyXP = 30;
       breakdown.push({ label: 'تغطية محاور التنويع الأربعة (+10 بونص)', xp: 30, icon: 'spark' });
-    } else {
-      const axes = new Set((chunk.vary?.items || []).map((it) => it.axis));
+    } else if (rec?.vary?.items?.length) {
+      const axes = new Set((rec.vary.items || []).map((it) => it.axis));
       varyXP = axes.size * 5 + (axes.size >= 4 ? 10 : 0);
       if (varyXP > 0) {
         breakdown.push({
@@ -548,24 +614,35 @@ export class TrophyManager {
     }
     total += varyXP;
 
-    if (chunk.test?.recall?.passed) {
+    if (rec?.test?.recall?.passed) {
       breakdown.push({ label: 'اجتياز الاستدعاء السريع (4+/5)', xp: 25, icon: 'target' });
       total += 25;
     }
 
-    if ((chunk.test?.sprint?.count || 0) >= 5) {
-      breakdown.push({ label: `بونص سرعة السبرنت (${chunk.test.sprint.count} جمل/د)`, xp: 15, icon: 'clock' });
+    if ((rec?.test?.sprint?.count || 0) >= 5) {
+      breakdown.push({ label: `بونص سرعة السبرنت (${rec.test.sprint.count} جمل/د)`, xp: 15, icon: 'clock' });
       total += 15;
     }
 
-    if ((chunk.test?.speaking?.seconds || 0) >= 30) {
+    if ((rec?.test?.speaking?.seconds || 0) >= 30) {
       breakdown.push({ label: 'بونص الكلام المرتجل بالألماني', xp: 10, icon: 'mic' });
       total += 10;
     }
 
-    if (chunk.mastery?.done) {
+    if (rec?.mastery?.done) {
       breakdown.push({ label: 'تاج الإتقان الشامل للمراجعة', xp: 20, icon: 'trophy' });
       total += 20;
+    }
+
+    if (groupPos?.group) {
+      if (groupPos.group.variationDone) {
+        breakdown.push({ label: 'إنجاز تنويعات قالب المجموعة (+50 بونص)', xp: 50, icon: 'target' });
+        total += 50;
+      }
+      if (groupPos.group.isMastered) {
+        breakdown.push({ label: 'إتقان مجموعة القالب بالكامل (+100 بونص)', xp: 100, icon: 'trophy' });
+        total += 100;
+      }
     }
 
     return { total, breakdown };

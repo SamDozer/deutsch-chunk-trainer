@@ -11,9 +11,7 @@ function focusCard(chunk, step) {
   const variants = store.variationCoverage(chunk.id);
   let hint = '';
   if (step === 3 && batch) hint = `فاضل ${30 - (store.peek(chunk.id)?.produce.total || 0)} إنتاج من الخطة`;
-  else if (step === 4) hint = `${variants} من 4 محاور اتغطت`;
-  else if (step === 5) hint = 'اختبر نفسك: استدعاء، سرعة، كلام';
-  else if (step === 6) hint = 'الشروط شبه كاملة — راجع آخر خطوة';
+  else if (step === 4) hint = 'اختبر نفسك: استدعاء، سرعة، كلام';
   else if (status === 'mastered') hint = 'متقن ومراجعته جاية';
   else hint = STAGES[step - 1]?.hint || '';
 
@@ -27,12 +25,12 @@ function focusCard(chunk, step) {
       <div class="de focus-de">${chunk.de}</div>
       <div class="focus-ar">${chunk.ar}</div>
       <div class="focus-rail" aria-hidden="true">
-        ${[0, 1, 2, 3, 4, 5].map((i) =>
+        ${[0, 1, 2, 3].map((i) =>
           html`<i class="${flags[i] ? 'on' : i === step - 1 ? 'now' : ''}"></i>`,
         )}
       </div>
       <div class="focus-foot">
-        <span>الخطوة ${step} من 6 · ${STAGES[step - 1]?.title || ''}</span>
+        <span>الخطوة ${step} من 4 · ${STAGES[step - 1]?.title || ''}</span>
         <span class="focus-sep">·</span>
         <span class="focus-hint">${hint}</span>
       </div>

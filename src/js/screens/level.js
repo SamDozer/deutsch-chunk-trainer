@@ -18,14 +18,22 @@ const FILTERS = [
 ];
 
 const uiByLevel = {};
-const PAGE = 40;
+const PAGE = 30;
 
 const getUI = (levelId) => {
-  if (!uiByLevel[levelId]) uiByLevel[levelId] = { filter: 'all', query: '', limit: PAGE };
+  if (!uiByLevel[levelId]) {
+    uiByLevel[levelId] = {
+      filter: 'all',
+      query: '',
+      limit: PAGE,
+      viewMode: 'groups', // 'groups' | 'all'
+      expanded: new Set(),
+    };
+  }
   return uiByLevel[levelId];
 };
 
-function chunkMatches(chunk, ui, dueSet, filterCounts) {
+function chunkMatches(chunk, ui, dueSet) {
   const status = store.status(chunk.id);
   if (ui.filter === 'learning' && status !== 'learning') return false;
   if (ui.filter === 'mastered' && status !== 'mastered') return false;
@@ -36,9 +44,26 @@ function chunkMatches(chunk, ui, dueSet, filterCounts) {
   return true;
 }
 
+function groupMatches(group, ui, dueSet) {
+  const q = ui.query.trim().toLowerCase();
+  const titleMatches = q && (group.title.toLowerCase().includes(q) || group.key.toLowerCase().includes(q));
+
+  // If a filter is applied, at least one chunk in the group must match the filter
+  const hasMatchingChunk = group.chunks.some((c) => chunkMatches(c, ui, dueSet));
+  if (!hasMatchingChunk && !titleMatches) return false;
+
+  if (ui.filter === 'learning' && group.learningCount === 0) return false;
+  if (ui.filter === 'mastered' && !group.isMastered) return false;
+  if (ui.filter === 'new' && group.freshCount === 0) return false;
+  if (ui.filter === 'due' && !group.chunks.some((c) => dueSet.has(c.id))) return false;
+
+  return true;
+}
+
 function rowMarkup(chunk, currentId) {
   const flags = store.stageFlags(chunk.id);
-  const done = flags.filter(Boolean).length;
+  const sentenceFlags = flags.slice(0, 4);
+  const done = sentenceFlags.filter(Boolean).length;
   const status = store.status(chunk.id);
   const phase = store.sessionPhase(chunk.id);
   const statusLabel = phase.label;
@@ -51,14 +76,76 @@ function rowMarkup(chunk, currentId) {
         <span class="de chunk-de">${chunk.de}</span>
         <span class="chunk-ar">${chunk.ar}</span>
       </span>
-      <span class="stage-dots" aria-label="${done} من 6 خطوات">
-        ${flags.map((flag, index) =>
+      <span class="stage-dots" aria-label="${done} من 4 خطوات">
+        ${sentenceFlags.map((flag, index) =>
           html`<i class="${flag ? 'on' : index === step - 1 && status !== 'mastered' ? 'now' : ''}"></i>`,
         )}
       </span>
       <span class="chunk-status ${statusClass}">${statusLabel}</span>
       <span class="chunk-go">${icon('forward')}</span>
     </button>
+  `;
+}
+
+function groupCardMarkup(group, currentId, isExpanded, hasQuery, dueSet, ui) {
+  const step = store.currentStep(group.firstUnfinished.id);
+  const statusTag = group.isMastered
+    ? html`<span class="chip chip-green" style="font-size:11px">متقنة بالكامل 🏆</span>`
+    : group.variationDone
+      ? html`<span class="chip chip-blue" style="font-size:11px">5 تنويعات جاهزة ✓</span>`
+      : group.learningCount > 0
+        ? html`<span class="chip chip-yellow" style="font-size:11px">قيد التدريب</span>`
+        : html`<span class="chip" style="font-size:11px">قالب جديد</span>`;
+
+  // Filter chunks if query/filter is active
+  const displayChunks = hasQuery || ui.filter !== 'all'
+    ? group.chunks.filter((c) => chunkMatches(c, ui, dueSet))
+    : group.chunks;
+
+  const showList = isExpanded || (hasQuery && displayChunks.length > 0);
+
+  return html`
+    <div class="group-card ${group.isMastered ? 'is-mastered' : ''}" data-group-id="${group.id}">
+      <div class="group-card-header" data-toggle-group="${group.id}">
+        <div class="group-card-info">
+          <div class="group-title-row">
+            <span class="group-icon">${icon('folder')}</span>
+            <span class="group-title de">${group.title}</span>
+            ${statusTag}
+          </div>
+          <div class="group-meta-row">
+            <span class="sub muted">${group.masteredCount} من ${group.total} جمل متقنة</span>
+            <span class="dot-sep"></span>
+            <div class="group-meter-wrap">
+              <div class="meter ticks" style="width:80px;height:6px"><span style="width:${group.pct}%;background:var(--lv)"></span></div>
+              <span class="group-pct">${group.pct}%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="group-card-actions">
+          <a class="btn btn-primary btn-sm group-start-btn" href="#/practice/${group.firstUnfinished.id}?step=${step}">
+            ${icon('play')} ابدأ تدريب المجموعة (${group.total} جمل)
+          </a>
+          <a class="btn btn-quiet btn-sm group-finale-btn" href="#/practice/${group.chunks[group.chunks.length - 1].id}?step=5" title="المرحلة الختامية: 5 تنويعات للقالب">
+            ${icon('spark')} ${group.variationDone ? 'التنويعات جاهزة ✓' : 'المرحلة الختامية ⚡'}
+          </a>
+          <button class="btn btn-ghost btn-sm group-toggle-btn" data-toggle-group="${group.id}">
+            ${showList ? 'إخفاء الجمل ▲' : `عرض الجمل (${group.total}) ▼`}
+          </button>
+        </div>
+      </div>
+
+      ${showList
+        ? html`
+            <div class="group-chunks-wrap">
+              <div class="chunk-list" style="border:0;border-radius:0;border-top:1px solid var(--line-soft)">
+                ${displayChunks.map((chunk) => rowMarkup(chunk, currentId))}
+              </div>
+            </div>
+          `
+        : ''}
+    </div>
   `;
 }
 
@@ -73,24 +160,53 @@ function listPayload(levelId) {
     else if (status === 'mastered') counts.mastered += 1;
     else counts.new += 1;
   }
-  const filtered = level.chunks.filter((chunk) => chunkMatches(chunk, ui, dueSet, counts));
-  const shown = filtered.slice(0, ui.limit);
+
   const currentId = store.pointer()?.chunkId;
-  const rows = shown.map((chunk) => rowMarkup(chunk, currentId));
-  return {
-    counts,
-    total: filtered.length,
-    shown: shown.length,
-    html: rows.length
-      ? html`${rows}`
-      : html`
-          <div class="empty" style="border:0;border-radius:0">
-            <div class="empty-icon">${icon('search')}</div>
-            <h3>مفيش جمل بالفلتر ده</h3>
-            <p>جرّب فلتر تاني أو امسح البحث.</p>
-          </div>
-        `,
-  };
+  const hasQuery = Boolean(ui.query.trim());
+
+  if (ui.viewMode === 'groups') {
+    const allGroups = store.getGroups(levelId);
+    const filteredGroups = allGroups.filter((g) => groupMatches(g, ui, dueSet));
+    const shownGroups = filteredGroups.slice(0, ui.limit);
+    const cards = shownGroups.map((g) =>
+      groupCardMarkup(g, currentId, ui.expanded.has(g.id), hasQuery, dueSet, ui),
+    );
+
+    return {
+      counts,
+      total: filteredGroups.length,
+      shown: shownGroups.length,
+      isGroups: true,
+      html: cards.length
+        ? html`${cards}`
+        : html`
+            <div class="empty" style="border:0;border-radius:0">
+              <div class="empty-icon">${icon('search')}</div>
+              <h3>مفيش مجموعات بالفلتر ده</h3>
+              <p>جرّب فلتر تاني أو امسح البحث.</p>
+            </div>
+          `,
+    };
+  } else {
+    const filtered = level.chunks.filter((chunk) => chunkMatches(chunk, ui, dueSet));
+    const shown = filtered.slice(0, ui.limit);
+    const rows = shown.map((chunk) => rowMarkup(chunk, currentId));
+    return {
+      counts,
+      total: filtered.length,
+      shown: shown.length,
+      isGroups: false,
+      html: rows.length
+        ? html`<div class="chunk-list">${rows}</div>`
+        : html`
+            <div class="empty" style="border:0;border-radius:0">
+              <div class="empty-icon">${icon('search')}</div>
+              <h3>مفيش جمل بالفلتر ده</h3>
+              <p>جرّب فلتر تاني أو امسح البحث.</p>
+            </div>
+          `,
+    };
+  }
 }
 
 function levelDescription(id) {
@@ -101,8 +217,10 @@ export const levelScreen = {
   render({ params }) {
     const levelId = store.level(params.levelId) ? params.levelId : 'A1';
     const level = store.level(levelId);
-    const stats = store.levelStats(levelId);    const ui = getUI(levelId);
+    const stats = store.levelStats(levelId);
+    const ui = getUI(levelId);
     const payload = listPayload(levelId);
+    const groups = store.getGroups(levelId);
     const firstUnfinished =
       level.chunks.find((chunk) => store.status(chunk.id) === 'learning') ||
       level.chunks.find((chunk) => store.status(chunk.id) !== 'mastered') ||
@@ -131,8 +249,8 @@ export const levelScreen = {
           <div class="level-hero-main">
             <div class="level-big">${level.id}</div>
             <div>
-              <h2>${chunksLabel(level.count)} في المستوى ده</h2>
-              <p>افتح أي جملة وامشي عليها 6 خطوات. تقدمك بيتحفظ لوحده.</p>
+              <h2>${chunksLabel(level.count)} مقسمة إلى ${groups.length} مجموعة قوالب</h2>
+              <p>اختر مجموعة وتدرب على جملها بالتتابع خطوة بخطوة. شروط التنويع تطبق مرة واحدة لكل مجموعة.</p>
             </div>
           </div>
           <div class="level-hero-side">
@@ -155,18 +273,29 @@ export const levelScreen = {
               `,
             )}
           </div>
+
+          <!-- View Mode Toggle: Groups vs All Chunks -->
+          <div class="view-mode-toggle" id="view-mode-toggle">
+            <button class="view-toggle-btn ${ui.viewMode === 'groups' ? 'is-active' : ''}" data-view="groups" title="عرض مجموعات القوالب">
+              ${icon('folder')} مجموعات القوالب (${groups.length})
+            </button>
+            <button class="view-toggle-btn ${ui.viewMode === 'all' ? 'is-active' : ''}" data-view="all" title="عرض كل الجمل مسطحة">
+              ${icon('list')} كل الجمل (${level.count})
+            </button>
+          </div>
+
           <label class="search-field">
             ${icon('search')}
-            <input id="chunk-search" type="search" placeholder="دوّر بالألماني أو بالعربي أو بالكود" value="${ui.query}" />
+            <input id="chunk-search" type="search" placeholder="دوّر بالقالب أو بالألماني أو بالعربي" value="${ui.query}" />
           </label>
         </div>
 
         <div id="list-wrap">
-          <div class="chunk-list" id="chunk-list">${payload.html}</div>
+          <div class="${ui.viewMode === 'groups' ? 'groups-list' : ''}" id="chunk-list">${payload.html}</div>
           <div class="pager" id="pager">
             ${payload.total > payload.shown
               ? html`<button class="btn btn-ghost btn-sm" data-more>عرض المزيد (${payload.total - payload.shown} فاضل)</button>`
-              : html`<span>${payload.total} ${payload.total === 1 ? 'جملة' : 'جملة'} · خلصت القايمة تحت الفلتر ده</span>`}
+              : html`<span>${payload.total} ${payload.isGroups ? 'مجموعة قوالب' : 'جملة'} تحت الفلتر ده</span>`}
           </div>
         </div>
 
@@ -176,7 +305,7 @@ export const levelScreen = {
               (stage, index) => html`<span class="method-step"><span class="method-num">${index + 1}</span>${stage.short}</span>`,
             )}
           </div>
-          <span class="sub muted">كل جملة بتتقن لما تعدّي الست خطوات — مش لما تخلصها مرة واحدة.</span>
+          <span class="sub muted">كل مجموعة بتتدرب على جملها بالتتابع، وبتنتج الـ 5 تنويعات مرة واحدة للقالب ككل!</span>
         </div>
       </div>
     `;
@@ -188,21 +317,50 @@ export const levelScreen = {
     const list = root.querySelector('#chunk-list');
     const pager = root.querySelector('#pager');
     const filters = root.querySelector('#filters');
+    const viewToggle = root.querySelector('#view-mode-toggle');
 
     const paint = () => {
       const payload = listPayload(levelId);
+      list.className = ui.viewMode === 'groups' ? 'groups-list' : '';
       list.innerHTML = String(payload.html);
       pager.innerHTML = String(
         payload.total > payload.shown
           ? html`<button class="btn btn-ghost btn-sm" data-more>عرض المزيد (${payload.total - payload.shown} فاضل)</button>`
-          : html`<span>${payload.total} جملة تحت الفلتر ده</span>`,
+          : html`<span>${payload.total} ${payload.isGroups ? 'مجموعة قوالب' : 'جملة'} تحت الفلتر ده</span>`,
       );
       filters.querySelectorAll('[data-filter]').forEach((btn) => {
         btn.classList.toggle('is-on', btn.dataset.filter === ui.filter);
       });
+      viewToggle?.querySelectorAll('[data-view]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.view === ui.viewMode);
+      });
     };
 
     const onClick = (event) => {
+      // Toggle view mode (groups vs all)
+      const viewBtn = event.target.closest('[data-view]');
+      if (viewBtn) {
+        ui.viewMode = viewBtn.dataset.view;
+        ui.limit = PAGE;
+        paint();
+        return;
+      }
+
+      // Ignore click on links (like Start Group button)
+      const link = event.target.closest('a');
+      if (link) return;
+
+      // Toggle group expansion
+      const groupToggle = event.target.closest('[data-toggle-group]');
+      if (groupToggle) {
+        const gid = groupToggle.dataset.toggleGroup;
+        if (ui.expanded.has(gid)) ui.expanded.delete(gid);
+        else ui.expanded.add(gid);
+        paint();
+        return;
+      }
+
+      // Filter click
       const filterBtn = event.target.closest('[data-filter]');
       if (filterBtn) {
         ui.filter = filterBtn.dataset.filter;
@@ -210,11 +368,15 @@ export const levelScreen = {
         paint();
         return;
       }
+
+      // Pagination click
       if (event.target.closest('[data-more]')) {
         ui.limit += PAGE;
         paint();
         return;
       }
+
+      // Chunk row click
       const row = event.target.closest('[data-href]');
       if (row) location.hash = row.dataset.href;
     };

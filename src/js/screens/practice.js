@@ -58,10 +58,10 @@ function ring(value, total) {
   `);
 }
 
-function stepHead(index, title, sub) {
+function stepHead(index, title, sub, totalSteps = 4) {
   return html`
     <div class="step-head">
-      <div class="step-kicker"><b>${index}</b> من 6 خطوات</div>
+      <div class="step-kicker"><b>${index}</b> من ${totalSteps} خطوات</div>
       <h2>${title}</h2>
       <p class="step-sub">${sub}</p>
     </div>
@@ -82,7 +82,7 @@ function chunkReference(chunk) {
 
 /* ---------------- STEP 1 ---------------- */
 
-function stepUnderstand(chunk, local) {
+function stepUnderstand(chunk, local, isLast = false) {
   const rec = store.record(chunk.id);
   const checks = rec.understand.checks || {};
   const parts = germanParts(chunk);
@@ -90,7 +90,7 @@ function stepUnderstand(chunk, local) {
   const tokens = chunk.de.split(/\s+/);
 
   return html`
-    ${stepHead(1, 'افهم الـChunk', 'اقرأ الجملة، افهم معناها بالعربي، وحدد وظيفتها قبل أي تدريب.')}
+    ${stepHead(1, 'افهم الـChunk', 'اقرأ الجملة، افهم معناها بالعربي، وحدد وظيفتها قبل أي تدريب.', isLast ? 5 : 4)}
     <div class="chunk-hero">
       <div class="de">
         ${parts.prefix ? html`<span class="tpl-mark">${parts.prefix}</span>` : ''}${parts.rest}
@@ -161,7 +161,7 @@ function stepUnderstand(chunk, local) {
 
 /* ---------------- STEP 2 ---------------- */
 
-function stepSpeak(chunk, local) {
+function stepSpeak(chunk, local, isLast = false) {
   const rec = store.record(chunk.id);
   const passes = rec.speak.passes;
   const ttsOn = store.state.settings.tts;
@@ -169,7 +169,7 @@ function stepSpeak(chunk, local) {
   const voicesLoaded = speech.allVoices().length > 0;
 
   return html`
-    ${stepHead(2, 'انطقه بصوت عالي', 'تلات مرات بس: بطيء، طبيعي، وبعدين من غير ما تبص على الجملة.')}
+    ${stepHead(2, 'انطقه بصوت عالي', 'تلات مرات بس: بطيء، طبيعي، وبعدين من غير ما تبص على الجملة.', isLast ? 5 : 4)}
     ${chunkReference(chunk)}
     <div class="tts-row">
       <button class="speak-btn" data-act="say" data-rate="0.62">${icon('speaker')} اسمعه بطيء</button>
@@ -211,7 +211,7 @@ function stepSpeak(chunk, local) {
 
 /* ---------------- STEP 3 ---------------- */
 
-function stepProduce(chunk, local) {
+function stepProduce(chunk, local, isLast = false) {
   const rec = store.record(chunk.id);
   const total = rec.produce.total || 0;
   const batches = store.batchState(chunk.id);
@@ -219,7 +219,7 @@ function stepProduce(chunk, local) {
   const session1Done = total >= 10;
 
   return html`
-    ${stepHead(3, 'درّب عليه 30 إنتاج', 'مش 30 مرة نفس الجملة — 30 جملة مختلفة بنفس القالب، موزّعة على أسبوع.')}
+    ${stepHead(3, 'درّب عليه 30 إنتاج', 'مش 30 مرة نفس الجملة — 30 جملة مختلفة بنفس القالب، موزّعة على أسبوع.', isLast ? 5 : 4)}
     ${chunkReference(chunk)}
     <div class="produce-top">
       <div class="ring-wrap">${ring(total, 30)}</div>
@@ -283,136 +283,52 @@ function stepProduce(chunk, local) {
   `;
 }
 
-/* ---------------- STEP 4 ---------------- */
+/* ---------------- STEP 4: TEST ---------------- */
 
-function stepVary(chunk, local) {
-  const rec = store.record(chunk.id);
-  const coverage = store.variationCoverage(chunk.id);
-  const siblings = store.siblings(chunk.id, 3);
-  const voice = local.voice;
-
-  return html`
-    ${stepHead(4, 'غيّر كل مرة', 'نفس القالب، أربع تغييرات: الفاعل، الزمن، الكلمات، والموقف.')}
-    ${chunkReference(chunk)}
-    <div class="produce-top" style="gap:14px">
-      <div class="counter-badge ${coverage >= 4 ? 'is-full' : ''}" style="font-size:14px;height:30px;padding:0 12px">
-        ${coverage} من 4 محاور
-      </div>
-      <div class="produce-copy">
-        <strong>${coverage >= 4 ? 'غطيت المحاور الأربعة' : `فاضل ${4 - coverage} محاور`}</strong>
-        <span>اكتب الجملة بالألماني أو انطقها بالمايك، راجع النص، وبعدها سجّل التنويع.</span>
-      </div>
-    </div>
-
-    <div class="axis-grid">
-      ${VARIATION_AXES.map((axis) => {
-        const items = rec.vary.items.filter((item) => item.axis === axis.key);
-        return html`
-          <div class="axis-card">
-            <div class="axis-head">
-              <span class="axis-title">${axis.title}</span>
-              <span class="counter-badge ${items.length ? 'is-full' : ''}">${items.length}</span>
-            </div>
-            <span class="axis-hint">${axis.hint}</span>
-            <textarea data-draft="${axis.key}" dir="auto" placeholder="اكتب جملة أو انطقها بالألماني..." ${voice.axis === axis.key && voice.state !== 'idle' ? 'readonly' : ''}>${local.drafts[axis.key] || ''}</textarea>
-            <div class="axis-actions">
-              <button class="btn btn-ghost btn-sm" data-act="vary:save" data-axis="${axis.key}" ${voice.axis === axis.key && voice.state !== 'idle' ? 'disabled' : ''}>
-                ${icon('check')} سجّل التنويع
-              </button>
-              <button class="btn btn-ghost btn-sm axis-voice-btn ${voice.axis === axis.key && voice.state === 'recording' ? 'is-recording' : ''}"
-                data-act="vary:voice" data-axis="${axis.key}" ${voice.state !== 'idle' && voice.axis !== axis.key ? 'disabled' : ''}
-                aria-label="${voice.axis === axis.key && voice.state === 'recording' ? 'إيقاف التسجيل' : voice.axis === axis.key && voice.state === 'processing' ? 'إلغاء التفريغ' : `سجّل جملة صوتية في ${axis.title}`}"
-                aria-pressed="${voice.axis === axis.key && voice.state === 'recording' ? 'true' : 'false'}">
-                ${voice.axis === axis.key && voice.state === 'processing' ? icon('close') : icon('mic')}
-                ${voice.axis === axis.key && voice.state === 'recording' ? 'إيقاف' : voice.axis === axis.key && voice.state === 'processing' ? 'إلغاء' : 'اتكلم بالألماني'}
-              </button>
-            </div>
-            ${voice.axis === axis.key && voice.state !== 'idle'
-              ? html`<div class="axis-voice-status ${voice.state}" role="status" aria-live="polite">
-                  <span class="axis-voice-indicator"></span>
-                  ${voice.state === 'recording' ? 'بيتسجّل صوتك... اضغط إيقاف لما تخلص (حد أقصى 30 ثانية).' : 'Whisper بيحوّل صوتك لنص ألماني... ممكن ياخد شوية وقت.'}
-                </div>`
-              : ''}
-          </div>
-        `;
-      })}
-    </div>
-
-    ${rec.vary.importedDone && !rec.vary.items.length
-      ? html`<div class="callout">${icon('spark')}<span>الخطوة دي متسجلة من ملف A1 القديم — تقدر تضيف تنويعات جديدة لو حبيت.</span></div>`
-      : ''}
-
-    ${rec.vary.items.length
-      ? html`
-          <div>
-            <div class="eyebrow" style="margin-bottom:8px">تنويعاتك المحفوظة (${rec.vary.items.length})</div>
-            <div class="vary-list">
-              ${rec.vary.items.map(
-                (item, index) => html`
-                  <div class="vary-item">
-                    <span class="chip">${store.axisTitle(item.axis)}</span>
-                    <span class="de">${item.text}</span>
-                    <button class="vary-del" data-act="vary:del" data-index="${index}" aria-label="امسح">${icon('close')}</button>
-                  </div>
-                `,
-              )}
-            </div>
-          </div>
-        `
-      : ''}
-
-    ${siblings.length
-      ? html`
-          <div>
-            <div class="eyebrow" style="margin-bottom:8px">جمل تانية بنفس القالب</div>
-            <div class="row">
-              ${siblings.map(
-                (sibling) => html`<a class="chip" href="#/practice/${sibling.id}?step=1" title="${sibling.ar}">${sibling.de.slice(0, 40)}${sibling.de.length > 40 ? '…' : ''}</a>`,
-              )}
-            </div>
-          </div>
-        `
-      : ''}
-  `;
-}
-
-/* ---------------- STEP 5 ---------------- */
-
-function stepTest(chunk) {
+function stepTest(chunk, isLast = false, next = null) {
   const rec = store.record(chunk.id);
   const recall = rec.test.recall;
   const sprint = rec.test.sprint;
   const speaking = rec.test.speaking;
   const delayed = rec.test.delayed;
-  const variationCount = rec.vary.items.length || (rec.vary.importedDone ? 5 : 0);
+  const groupPos = store.getGroupPosition(chunk.id);
   const delayedDue = store.delayedDue(chunk.id);
   const delayedReady = Boolean(delayedDue && delayedDue <= new Date());
   const daysLeft = delayedDue ? Math.max(1, daysBetween(new Date(), delayedDue)) : 7;
-  const passedCount = [recall.passed, variationCount >= 5, sprint.count >= 5, speaking.seconds >= 30].filter(Boolean).length;
+  const passedCount = [recall.passed, sprint.count >= 5, speaking.seconds >= 30].filter(Boolean).length;
+  const allImmediateDone = passedCount === 3;
 
   return html`
-    ${stepHead(5, 'اختبر نفسك', 'أربع اختبارات فورية للاستدعاء والتنويع والسرعة والكلام، واختبار مؤجل بعد أسبوع.')}
+    ${stepHead(4, 'اختبر نفسك', 'تلات اختبارات فورية للاستدعاء والسرعة والكلام، واختبار مؤجل بعد أسبوع.', isLast ? 5 : 4)}
     <div class="produce-top" style="gap:18px">
-      <div class="counter-badge ${passedCount === 4 ? 'is-full' : ''}" style="font-size:14px;height:30px;padding:0 12px">${passedCount} من 4</div>
+      <div class="counter-badge ${allImmediateDone ? 'is-full' : ''}" style="font-size:14px;height:30px;padding:0 12px">${passedCount} من 3</div>
       <div class="produce-copy">
-        <strong>${passedCount === 4 ? 'كل الاختبارات الفورية اكتملت بنجاح ✓' : 'كمّل الاختبارات الفورية الناقصة'}</strong>
-        <span>الاستدعاء والسرعة والكلام والتنويع شرط أساسي للإتقان المبدئي. الاستدعاء المؤجل يأتي بعد أسبوع في جدول المراجعة.</span>
+        <strong>${allImmediateDone ? 'كل الاختبارات الفورية للجملة اكتملت بنجاح ✓' : 'كمّل الاختبارات الفورية للجملة'}</strong>
+        <span>الاستدعاء السريع وسبرنت الدقيقة والكلام المرتجل شرط أساسي لإتقان الجملة. الاستدعاء المؤجل يأتي بعد أسبوع في جدول المراجعة.</span>
       </div>
     </div>
 
-    ${passedCount === 4
+    ${allImmediateDone
       ? html`
-          <div class="callout" style="background:var(--card-2);border-inline-start-color:var(--yellow);margin-top:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div class="callout" style="background:var(--card-2);border-inline-start-color:var(--green);margin-top:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <span style="font-size:24px">🎉</span>
               <div>
-                <strong>اجتزت كل الاختبارات الفورية بنجاح!</strong>
-                <p style="margin:2px 0 0;font-size:12px;color:var(--muted)">تقدر دلوقتي تعتبر الجملة متقنة وتشوف ملخص نقاط الإتقان (XP).</p>
+                <strong>اجتزت كل اختبارات الجملة بنجاح! (+20 XP)</strong>
+                <p style="margin:2px 0 0;font-size:12px;color:var(--muted)">
+                  ${next?.inGroup
+                    ? `الجملة أصبحت متقنة. اضغط للاستمرار إلى الجملة التالية في المجموعة.`
+                    : `أتممت جميع جمل المجموعة الأساسية! اضغط للانتقال للمرحلة الختامية (5 تنويعات للقالب).`}
+                </p>
               </div>
             </div>
-            <button class="btn btn-primary btn-sm" data-act="summary:view">
-              ${icon('trophy')} اعتبره متقن وشوف ملخص الـ XP
-            </button>
+            ${next?.inGroup
+              ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=1">
+                  الجملة التالية بالمجموعة (${next.position}/${next.total}) ${icon('forward')}
+                </a>`
+              : html`<button class="btn btn-primary btn-sm" data-act="go-step" data-step="5">
+                  المرحلة الختامية للمجموعة (5 تنويعات) ${icon('spark')}
+                </button>`}
           </div>
         `
       : ''}
@@ -429,20 +345,6 @@ function stepTest(chunk) {
             ${recall.passed ? `تم ✓ (${recall.score} من ${recall.total})` : recall.at ? `${recall.score} من ${recall.total} · ${relativeWhen(recall.at)}` : 'لسه ما اتجربش'}
           </span>
           <button class="btn ${recall.passed ? 'btn-ghost' : 'btn-primary'} btn-sm" data-act="recall:start">${recall.passed ? 'أعد' : 'ابدأ'}</button>
-        </div>
-      </div>
-
-      <div class="test-card ${variationCount >= 5 ? 'is-done' : ''}">
-        <div class="test-head">
-          <span class="test-ico ${variationCount >= 5 ? 'green' : ''}">${icon('spark')}</span>
-          <h4>تنويع</h4>
-        </div>
-        <p class="test-req">5 جمل مختلفة بنفس القالب — بتتحسب من خطوة «غيّر».</p>
-        <div class="test-foot">
-          <span class="test-state ${variationCount >= 5 ? 'done' : ''}">${variationCount >= 5 ? 'تم ✓ (5 من 5 جمل)' : `${variationCount} من 5 جمل`}</span>
-          ${variationCount >= 5
-            ? html`<span class="test-state done">تم</span>`
-            : html`<button class="btn btn-ghost btn-sm" data-act="go-step" data-step="4">روح لخطوة 4</button>`}
         </div>
       </div>
 
@@ -477,13 +379,13 @@ function stepTest(chunk) {
           <span class="test-ico ${delayed.passed ? 'green' : delayedReady ? '' : 'locked'}">${delayed.passed ? icon('trophy') : icon('calendar')}</span>
           <h4>استدعاء مؤجل (تثبيت متباعد بعد 7 أيام)</h4>
         </div>
-        <p class="test-req">بعد أسبوع من خطوة التنويع، قول الجملة من غير أي مراجعة في اليوم ده لتأكيد تثبيتها في الذاكرة الدائمة.</p>
+        <p class="test-req">بعد أسبوع من تدريب الجملة، قولها من غير أي مراجعة في اليوم ده لتأكيد تثبيتها في الذاكرة الدائمة.</p>
         <div class="test-foot">
           <span class="test-state ${delayed.passed ? 'done' : delayedReady ? '' : 'locked'}">
             ${delayed.passed
               ? `عدّى بنجاح · ${relativeWhen(delayed.at)}`
               : !delayedDue
-                ? 'بيفتح تلقائيًا بعد أسبوع من خطوة «غيّر»'
+                ? 'بيفتح تلقائيًا بعد أسبوع من تدريب الجملة'
                 : delayedReady
                   ? 'مستحق النهاردة'
                   : `🔒 مقفل — بيفتح بعد ${daysLeft} أيام`}
@@ -499,93 +401,139 @@ function stepTest(chunk) {
   `;
 }
 
-/* ---------------- STEP 6 ---------------- */
+/* ---------------- STEP 5: GROUP FINALE ---------------- */
 
-function stepMastery(chunk, next) {
+function stepGroupFinale(chunk, local) {
   const rec = store.record(chunk.id);
-  const flags = store.stageFlags(chunk.id);
-  const gates = [
-    { done: flags[0], label: 'فهمت الـChunk وحددت وظيفته', hint: 'خطوة 1', step: 1 },
-    { done: flags[1], label: 'نطقته 3 مرات بصوت عالي', hint: 'خطوة 2', step: 2 },
-    { done: flags[2], label: 'إنتاج الجلسة الأولى (10 جمل على الأقل)', hint: 'خطوة 3', step: 3 },
-    { done: flags[3], label: '4 محاور تنويع', hint: 'خطوة 4', step: 4 },
-    {
-      done: flags[4],
-      label: 'الاختبارات الفورية: استدعاء + تنويع + سرعة + كلام (4 من 4)',
-      hint: 'خطوة 5',
-      step: 5,
-    },
-  ];
-  const ready = gates.every((gate) => gate.done);
-  const mastered = rec.mastery.done;
-  const missing = gates.filter((gate) => !gate.done);
-  const missingLabel =
-    missing.length === 1 ? 'شرط واحد ناقص' : missing.length === 2 ? 'شرطين ناقصين' : `${missing.length} شروط ناقصة`;
+  const groupPos = store.getGroupPosition(chunk.id);
+  const group = groupPos?.group;
+  const groupId = group?.id;
+  const groupDone = groupId ? store.isGroupVariationDone(groupId) : false;
+  const groupVars = groupId ? store.getGroupVariations(groupId) : [];
+  const items = groupVars.length ? groupVars : rec.vary.items;
+  const siblings = store.siblings(chunk.id, 5);
+  const voice = local.voice;
+  const templateTitle = group?.title || chunk.template || chunk.de;
 
   return html`
-    ${stepHead(6, 'اعتبره متقنًا', 'الإتقان مش إنك خلصت الخطوات — إن الجملة تطلع منك لوحدها بعد فترة.')}
-    <div class="gate-list">
-      ${gates.map(
-        (gate) => html`
-          <div class="gate-row ${gate.done ? 'is-on' : ''}">
-            ${icon(gate.done ? 'check' : 'lock')}
-            <span>${gate.label}</span>
-            <button class="link gate-hint" data-act="go-step" data-step="${gate.step}">${gate.hint}</button>
-          </div>
-        `,
-      )}
+    <div class="step-head">
+      <div class="step-kicker" style="color:var(--yellow);font-weight:700">
+        🏆 المرحلة الختامية للمجموعة ${groupPos ? `· (${groupPos.total} من ${groupPos.total} جمل مكتملة)` : ''}
+      </div>
+      <h2>المرحلة الختامية للمجموعة: غيّر كل مرة (5 تنويعات للقالب)</h2>
+      <p class="step-sub">
+        أتممت التدريب على جمل المجموعة! دلوقتي هتطبّق 5 تنويعات جديدة على قالب «<b class="de" style="color:var(--ink)">${templateTitle}</b>» عبر المحاور الأربعة (الفاعل، الزمن، الكلمات، الموقف) لاعتماد إتقان المجموعة بالكامل (+150 XP).
+      </p>
     </div>
 
-    ${mastered
+    ${chunkReference(chunk)}
+
+    ${groupDone
       ? html`
-          <div class="mastery-card">
-            <div class="mastery-sticker">${icon('trophy')}</div>
-            <div>
-              <h3>الجملة متقنة ✓</h3>
-              <p>${rec.mastery.at ? `اتقنت ${relativeWhen(rec.mastery.at)}` : ''} · المراجعة الجاية ${dueLabel(rec.review.due)}</p>
+          <div class="callout" style="background:var(--card-2);border-inline-start-color:var(--green);margin:14px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:28px">🏆</span>
+              <div>
+                <strong>تم إنجاز شرط الـ 5 تنويعات وإتقان مجموعة «${templateTitle}» بنجاح! (+150 XP)</strong>
+                <p style="margin:2px 0 0;font-size:12px;color:var(--muted)">القالب وجمله أصبحت متقنة بالكامل في سجلك. تقدر تضيف تنويعات إضافية أو ترجع لقائمة المستويات.</p>
+              </div>
             </div>
-            <div class="row" style="margin-inline-start:auto;gap:8px">
-              <button class="btn btn-ghost btn-sm" data-act="summary:view">${icon('trophy')} ملخص الـ XP</button>
-              ${next ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها (${next.id}) ${icon('forward')}</a>` : ''}
+            <a class="btn btn-primary btn-sm" href="#/level/${chunk.level}">
+              ${icon('forward')} العودة لقائمة المجموعات
+            </a>
+          </div>
+        `
+      : ''}
+
+    <div class="produce-top" style="gap:14px">
+      <div class="counter-badge ${items.length >= 5 ? 'is-full' : ''}" style="font-size:14px;height:30px;padding:0 12px">
+        ${items.length} من 5 تنويعات للقالب
+      </div>
+      <div class="produce-copy">
+        <strong>${items.length >= 5 ? 'اكتمل شرط الـ 5 تنويعات للقالب ✓' : `فاضل ${Math.max(0, 5 - items.length)} تنويعات لاعتماد إتقان المجموعة`}</strong>
+        <span>اكتب الجملة بالألماني أو انطقها بالمايك، وسجلها عبر المحاور الأربعة. بعد 5 تنويعات تُعتبر المجموعة متقنة بالكامل (+150 XP)!</span>
+      </div>
+    </div>
+
+    <div class="axis-grid">
+      ${VARIATION_AXES.map((axis) => {
+        const axisItems = items.filter((item) => item.axis === axis.key);
+        return html`
+          <div class="axis-card">
+            <div class="axis-head">
+              <span class="axis-title">${axis.title}</span>
+              <span class="counter-badge ${axisItems.length ? 'is-full' : ''}">${axisItems.length}</span>
+            </div>
+            <span class="axis-hint">${axis.hint}</span>
+            <textarea data-draft="${axis.key}" dir="auto" placeholder="اكتب جملة أو انطقها بالألماني..." ${voice.axis === axis.key && voice.state !== 'idle' ? 'readonly' : ''}>${local.drafts[axis.key] || ''}</textarea>
+            <div class="axis-actions">
+              <button class="btn btn-ghost btn-sm" data-act="vary:save" data-axis="${axis.key}" ${voice.axis === axis.key && voice.state !== 'idle' ? 'disabled' : ''}>
+                ${icon('check')} سجّل التنويع
+              </button>
+              <button class="btn btn-ghost btn-sm axis-voice-btn ${voice.axis === axis.key && voice.state === 'recording' ? 'is-recording' : ''}"
+                data-act="vary:voice" data-axis="${axis.key}" ${voice.state !== 'idle' && voice.axis !== axis.key ? 'disabled' : ''}
+                aria-label="${voice.axis === axis.key && voice.state === 'recording' ? 'إيقاف التسجيل' : voice.axis === axis.key && voice.state === 'processing' ? 'إلغاء التفريغ' : `سجّل جملة صوتية في ${axis.title}`}"
+                aria-pressed="${voice.axis === axis.key && voice.state === 'recording' ? 'true' : 'false'}">
+                ${voice.axis === axis.key && voice.state === 'processing' ? icon('close') : icon('mic')}
+                ${voice.axis === axis.key && voice.state === 'recording' ? 'إيقاف' : voice.axis === axis.key && voice.state === 'processing' ? 'إلغاء' : 'اتكلم بالألماني'}
+              </button>
+            </div>
+            ${voice.axis === axis.key && voice.state !== 'idle'
+              ? html`<div class="axis-voice-status ${voice.state}" role="status" aria-live="polite">
+                  <span class="axis-voice-indicator"></span>
+                  ${voice.state === 'recording' ? 'بيتسجّل صوتك... اضغط إيقاف لما تخلص (حد أقصى 30 ثانية).' : 'Whisper بيحوّل صوتك لنص ألماني... ممكن ياخد شوية وقت.'}
+                </div>`
+              : ''}
+          </div>
+        `;
+      })}
+    </div>
+
+    ${rec.vary.importedDone && !items.length
+      ? html`<div class="callout">${icon('spark')}<span>الخطوة دي متسجلة من ملف A1 القديم — تقدر تضيف تنويعات جديدة لو حبيت.</span></div>`
+      : ''}
+
+    ${items.length
+      ? html`
+          <div>
+            <div class="eyebrow" style="margin-bottom:8px">تنويعات قالب المجموعة (${items.length} مسجلة)</div>
+            <div class="vary-list">
+              ${items.map(
+                (item, index) => html`
+                  <div class="vary-item">
+                    <span class="chip">${store.axisTitle(item.axis)}</span>
+                    <span class="de">${item.text}</span>
+                    <button class="vary-del" data-act="vary:del" data-index="${index}" aria-label="امسح">${icon('close')}</button>
+                  </div>
+                `,
+              )}
             </div>
           </div>
         `
-      : ready
-        ? html`
-            <div class="mastery-card">
-              <div class="mastery-sticker">${icon('trophy')}</div>
-              <div>
-                <h3>كل الشروط اكتملت ✓</h3>
-                <p>لو حاسس إن الجملة بتخرج منك طبيعي وبسرعة — اعتبرها متقنة، وهتدخل جدول المراجعات الدورية تلقائيًا.</p>
-              </div>
-              <button class="btn btn-primary" data-act="mastery:complete">اعتبره متقن ${icon('check')}</button>
-            </div>
-          `
-        : html`
-            <div class="callout">
-              ${icon('lock')}
-              <span>لسه ${missingLabel}. كمّلهم وبعدين ارجع للخطوة دي.</span>
-              ${missing[0] ? html`<button class="btn btn-ghost btn-sm" data-act="go-step" data-step="${missing[0].step}">روح للخطوة</button>` : ''}
-            </div>
-          `}
+      : ''}
 
-    <div class="callout" style="background:var(--card-2);border-inline-start-color:var(--blue)">
-      ${icon('calendar')}
-      <span>بعد الإتقان، الجملة بتدخل جدول المراجعة التكرارية: بعد 3 أيام، وبعدها الفواصل بتطول تلقائيًا كل مرة تعرفها.</span>
-    </div>
-
-    ${!mastered && !ready
-      ? html`<a class="link" href="#/level/${chunk.level}">اشتغل على جملة تانية لحد ما المواعيد تحين ${icon('forward')}</a>`
+    ${siblings.length
+      ? html`
+          <div>
+            <div class="eyebrow" style="margin-bottom:8px">جمل تانية بنفس القالب</div>
+            <div class="row">
+              ${siblings.map(
+                (sibling) => html`<a class="chip" href="#/practice/${sibling.id}?step=1" title="${sibling.ar}">${sibling.de.slice(0, 40)}${sibling.de.length > 40 ? '…' : ''}</a>`,
+              )}
+            </div>
+          </div>
+        `
       : ''}
   `;
 }
 
 /* ---------------- PRACTICE SCREEN ---------------- */
 
-function railMarkup(step) {
+function railMarkup(step, isLast = false) {
   const flags = store.stageFlags(currentChunkId);
+  const stagesToRender = isLast ? STAGES.slice(0, 5) : STAGES.slice(0, 4);
   return html`
-    ${STAGES.map((stage, index) => {
+    ${stagesToRender.map((stage, index) => {
       const number = index + 1;
       const done = flags[index];
       const isNow = number === step;
@@ -618,14 +566,18 @@ export const practiceScreen = {
       `;
     }
     currentChunkId = chunk.id;
+    const level = store.level(chunk.level);
+    const groupPos = store.getGroupPosition(chunk.id);
+    const group = groupPos?.group;
+    const cIndex = level?.chunks?.findIndex((c) => c.id === chunk.id) ?? -1;
+    const prevC = groupPos?.prevChunk || (cIndex > 0 ? level.chunks[cIndex - 1] : null);
+    const nextC = groupPos?.nextChunk || (cIndex >= 0 && cIndex < (level?.chunks?.length - 1) ? level.chunks[cIndex + 1] : null);
+    const isLastChunk = !nextC;
+    const maxAllowedStep = isLastChunk ? 5 : 4;
     const requested = Number(query.get('step'));
-    const step = clamp(Number.isFinite(requested) && requested > 0 ? requested : store.currentStep(chunk.id), 1, 6);
+    const step = clamp(Number.isFinite(requested) && requested > 0 ? requested : store.currentStep(chunk.id), 1, maxAllowedStep);
     const total = store.peek(chunk.id)?.produce.total || 0;
     const phase = store.sessionPhase(chunk.id);
-    const level = store.level(chunk.level);
-    const cIndex = level?.chunks?.findIndex((c) => c.id === chunk.id) ?? -1;
-    const prevC = cIndex > 0 ? level.chunks[cIndex - 1] : null;
-    const nextC = cIndex >= 0 && cIndex < (level?.chunks?.length - 1) ? level.chunks[cIndex + 1] : null;
     const rankInfo = trophyManager.getRankInfo();
 
     return html`
@@ -635,8 +587,13 @@ export const practiceScreen = {
           <div class="practice-meta">
             <strong>${chunk.level} · ${chunk.id}</strong>
             <span class="dot-sep"></span>
-            <span class="sub muted">${chunk.family ? `قالب: ${chunk.template}` : 'جملة مستقلة'}</span>
+            ${group
+              ? html`<span class="sub" style="color:var(--ink);font-weight:600">مجموعة: <span class="de">${group.title}</span> (${groupPos.position} من ${groupPos.total})</span>`
+              : html`<span class="sub muted">${chunk.family ? `قالب: ${chunk.template}` : 'جملة مستقلة'}</span>`}
             <span class="dot-sep"></span>
+            ${group?.variationDone
+              ? html`<span class="chip chip-blue" style="font-size:11px">5 تنويعات جاهزة ✓</span>`
+              : html`<button class="chip chip-yellow" data-act="go-step" data-step="5" style="font-size:11px;cursor:pointer" title="الانتقال للمرحلة الختامية">المرحلة الختامية ⚡</button>`}
             <span class="chip chip-yellow" style="font-size:11px">${phase.label}</span>
           </div>
 
@@ -648,8 +605,8 @@ export const practiceScreen = {
           </div>
 
           <div class="chunk-nav-seq" style="margin-inline-start:auto;display:flex;align-items:center;gap:6px">
-            ${prevC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${prevC.id}?step=1" title="الجملة السابقة (${prevC.id})">${icon('back')} ${prevC.id}</a>` : ''}
-            ${nextC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${nextC.id}?step=1" title="الجملة التالية (${nextC.id})">${nextC.id} ${icon('forward')}</a>` : ''}
+            ${prevC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${prevC.id}?step=1" title="الجملة السابقة">${icon('back')} ${groupPos?.prevChunk ? `السابقة (${groupPos.position - 1}/${groupPos.total})` : prevC.id}</a>` : ''}
+            ${nextC ? html`<a class="btn btn-ghost btn-sm" href="#/practice/${nextC.id}?step=1" title="الجملة التالية">${groupPos?.nextChunk ? `التالية (${groupPos.position + 1}/${groupPos.total})` : nextC.id} ${icon('forward')}</a>` : ''}
           </div>
           <span class="saveflag" id="saveflag">محفوظ تلقائيًا</span>
         </div>
@@ -675,7 +632,7 @@ export const practiceScreen = {
 
             <div class="rail-panel">
               <div class="rail-panel-title">مسار الجملة</div>
-              <ul class="rail-steps" id="rail">${railMarkup(step)}</ul>
+              <ul class="rail-steps" id="rail">${railMarkup(step, isLastChunk)}</ul>
             </div>
             <div class="session-box">
               <div class="between"><span>وقت الجلسة</span><b id="session-clock">00:00</b></div>
@@ -711,7 +668,17 @@ export const practiceScreen = {
     let heartbeat = null;
     let clockTick = null;
 
+    const groupPos = store.getGroupPosition(chunk.id);
     const prevChunk = () => {
+      if (groupPos?.prevChunk) {
+        return {
+          id: groupPos.prevChunk.id,
+          step: store.currentStep(groupPos.prevChunk.id),
+          inGroup: true,
+          position: groupPos.position - 1,
+          total: groupPos.total,
+        };
+      }
       const level = store.level(chunk.level);
       const index = level.chunks.findIndex((c) => c.id === chunk.id);
       const preceding = level.chunks[index - 1];
@@ -719,6 +686,15 @@ export const practiceScreen = {
       return null;
     };
     const nextChunk = () => {
+      if (groupPos?.nextChunk) {
+        return {
+          id: groupPos.nextChunk.id,
+          step: store.currentStep(groupPos.nextChunk.id),
+          inGroup: true,
+          position: groupPos.position + 1,
+          total: groupPos.total,
+        };
+      }
       const level = store.level(chunk.level);
       const index = level.chunks.findIndex((c) => c.id === chunk.id);
       const following = level.chunks[index + 1];
@@ -848,7 +824,9 @@ export const practiceScreen = {
           </div>
 
           <div class="modal-actions" style="justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap">
-            ${nextC ? html`<button class="btn btn-primary" data-act-next-chunk>الجملة التالية (${nextC.id}) ${icon('forward')}</button>` : ''}
+            ${nextC?.inGroup
+              ? html`<button class="btn btn-primary" data-act-next-chunk>الجملة التالية بالمجموعة (${nextC.position}/${nextC.total}) ${icon('forward')}</button>`
+              : html`<button class="btn btn-primary" data-act-go-finale>المرحلة الختامية للمجموعة (5 تنويعات) ${icon('spark')}</button>`}
             <a class="btn btn-ghost" href="#/level/${targetChunk.level}">العودة للمستويات</a>
             <a class="btn btn-quiet" href="#/trophies">${icon('trophy')} خزانة الإنجازات</a>
           </div>
@@ -866,14 +844,18 @@ export const practiceScreen = {
           location.hash = `#/practice/${nextC.id}?step=1`;
         }
       });
+
+      modal.root.querySelector('[data-act-go-finale]')?.addEventListener('click', () => {
+        audioEngine.playTap();
+        modal.close();
+        goToStep(5);
+      });
     };
 
-    const checkStep5Completion = () => {
+    const checkImmediateTestsCompletion = () => {
       const r = store.record(chunk.id);
-      const vCount = r.vary?.items?.length || (r.vary?.importedDone ? 5 : 0);
       const immediateTestsPassed = Boolean(
         r.test?.recall?.passed &&
-        vCount >= 5 &&
         r.test?.sprint?.count >= 5 &&
         r.test?.speaking?.seconds >= 30
       );
@@ -884,6 +866,64 @@ export const practiceScreen = {
           showCompletionSummaryModal(chunk);
         }, 500);
       }
+    };
+
+    const showGroupMasterySummaryModal = (targetChunk, targetGroup) => {
+      audioEngine.playWorkoutComplete();
+      const rankInfo = trophyManager.getRankInfo();
+      const groupTitle = targetGroup?.title || targetChunk.template || 'مجموعة القالب';
+      const totalChunks = groupPos?.total || 10;
+
+      const modalContent = html`
+        <div class="completion-summary-modal" style="text-align:center;padding:16px 8px">
+          <div class="summary-trophy-badge" style="background:linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,165,0,0.3));border:2px solid var(--yellow)">
+            <span class="summary-trophy-icon">${icon('trophy')}</span>
+          </div>
+
+          <span class="eyebrow" style="color:var(--yellow);margin-top:10px;display:inline-block">إنجاز استثنائي 🏆</span>
+          <h2 style="font-size:24px;margin:6px 0 2px">أتقنت مجموعة «${groupTitle}» بالكامل!</h2>
+          <p class="sub muted" style="margin-bottom:14px">أتممت تدريب كل جمل المجموعة (${totalChunks} من ${totalChunks}) وأنجزت الـ 5 تنويعات الشاملة بنجاح.</p>
+
+          <div class="summary-total-xp-banner" style="background:var(--card-2);border:1px solid var(--border)">
+            <span class="summary-xp-kicker">مجموع نقاط الـ XP المكتسبة للمجموعة</span>
+            <div class="summary-xp-number"><b style="color:var(--yellow)">+150</b> <span>XP</span></div>
+          </div>
+
+          <div class="summary-breakdown-grid">
+            <div class="summary-item-chip">
+              <span class="item-icon">${icon('spark')}</span>
+              <span class="item-lbl">تنويع قالب المجموعة (5 تنويعات عبر المحاور)</span>
+              <strong class="item-xp">+50 XP</strong>
+            </div>
+            <div class="summary-item-chip">
+              <span class="item-icon">${icon('trophy')}</span>
+              <span class="item-lbl">بونص إتقان جميع جمل المجموعة بالكامل</span>
+              <strong class="item-xp">+100 XP</strong>
+            </div>
+          </div>
+
+          <div class="summary-level-progress">
+            <div class="between" style="font-size:13px;margin-bottom:6px">
+              <span><b>${rankInfo.current.icon} ${rankInfo.current.title}</b> (المستوى ${rankInfo.current.level} من 50)</span>
+              <span><b>${rankInfo.xp.toLocaleString()}</b> XP إجمالي</span>
+            </div>
+            <div class="bento-bar"><span style="width:${rankInfo.progressPct}%"></span></div>
+          </div>
+
+          <div class="summary-egy-praise">
+            <p>عاش يا بطل! أتقنت القالب بكل تفاصيله وتفرعاته وجمله، وبقى جزء راسخ وسريع في لسانك الألماني. يلا على المجموعة اللي بعدها!</p>
+          </div>
+
+          <div class="modal-actions" style="justify-content:center;gap:10px;margin-top:20px;flex-wrap:wrap">
+            <a class="btn btn-primary" href="#/level/${targetChunk.level}">العودة لقائمة المجموعات ${icon('forward')}</a>
+            <a class="btn btn-ghost" href="#/trophies">${icon('trophy')} خزانة الإنجازات</a>
+          </div>
+        </div>
+      `;
+
+      openModal(modalContent, {
+        className: 'summary-dialog-window',
+      });
     };
 
     const setSaveFlag = (state = 'saved') => {
@@ -908,16 +948,16 @@ export const practiceScreen = {
     };
 
     const paint = () => {
+      const isLast = !next?.inGroup;
       const rec = store.record(chunk.id);
-      if (step === 1) panel.innerHTML = String(stepUnderstand(chunk, local));
-      else if (step === 2) panel.innerHTML = String(stepSpeak(chunk, local));
-      else if (step === 3) panel.innerHTML = String(stepProduce(chunk, local));
-      else if (step === 4) panel.innerHTML = String(stepVary(chunk, { drafts, voice }));
-      else if (step === 5) panel.innerHTML = String(stepTest(chunk));
-      else panel.innerHTML = String(stepMastery(chunk, next));
+      if (step === 1) panel.innerHTML = String(stepUnderstand(chunk, local, isLast));
+      else if (step === 2) panel.innerHTML = String(stepSpeak(chunk, local, isLast));
+      else if (step === 3) panel.innerHTML = String(stepProduce(chunk, local, isLast));
+      else if (step === 4) panel.innerHTML = String(stepTest(chunk, isLast, next));
+      else panel.innerHTML = String(stepGroupFinale(chunk, { drafts, voice }));
 
       panel.innerHTML += String(footerMarkup(step));
-      rail.innerHTML = String(railMarkup(step));
+      rail.innerHTML = String(railMarkup(step, isLast));
       history.replaceState(null, '', `#/practice/${chunk.id}?step=${step}`);
       store.setPointer(chunk.id, step);
       bindStepInputs();
@@ -926,22 +966,36 @@ export const practiceScreen = {
       if (step === 2 && recUrl) renderAudio();
     };
 
-    const footerMarkup = (current) => html`
-      <div class="step-foot">
-        <button class="btn btn-ghost btn-sm" data-act="prev" ${current === 1 ? 'disabled' : ''}>${icon('back')} اللي فات</button>
-        <div class="step-dots">${[0, 1, 2, 3, 4, 5].map((i) => html`<i class="${i < current ? 'on' : ''}"></i>`)}</div>
-        ${current < 6
-          ? html`<button class="btn btn-primary btn-sm" data-act="next">الخطوة اللي بعدها ${icon('forward')}</button>`
-          : store.peek(chunk.id)?.mastery?.done
-            ? (next ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=${next.step}">الجملة اللي بعدها (${next.id}) ${icon('forward')}</a>` : '')
-            : html`<button class="btn btn-ghost btn-sm" data-act="finish" disabled>كمّل الشروط الأول</button>`}
-        ${next ? html`<a class="btn btn-quiet btn-sm" href="#/practice/${next.id}?step=${next.step}" style="margin-inline-start:auto" title="انتقل للجملة التالية مباشرة">الجملة التالية (${next.id}) ${icon('forward')}</a>` : ''}
-      </div>
-    `;
+    const footerMarkup = (current) => {
+      const isLast = !next?.inGroup;
+      const totalSteps = isLast ? 5 : 4;
+      const dots = Array.from({ length: totalSteps }, (_, i) => i);
+      const gid = groupPos?.group?.id;
+      const groupDone = gid ? store.isGroupVariationDone(gid) : false;
+
+      return html`
+        <div class="step-foot">
+          <button class="btn btn-ghost btn-sm" data-act="prev" ${current === 1 ? 'disabled' : ''}>${icon('back')} اللي فات</button>
+          <div class="step-dots">${dots.map((i) => html`<i class="${i < current ? 'on' : ''}"></i>`)}</div>
+          ${current < totalSteps
+            ? html`<button class="btn btn-primary btn-sm" data-act="next">الخطوة اللي بعدها ${icon('forward')}</button>`
+            : current === 4 && next?.inGroup
+              ? html`<a class="btn btn-primary btn-sm" href="#/practice/${next.id}?step=1">الجملة التالية بالمجموعة (${next.position}/${next.total}) ${icon('forward')}</a>`
+              : current === 4 && isLast
+                ? html`<button class="btn btn-primary btn-sm" data-act="go-step" data-step="5">المرحلة الختامية (5 تنويعات) ${icon('spark')}</button>`
+                : groupDone
+                  ? html`<a class="btn btn-primary btn-sm" href="#/level/${chunk.level}">العودة للمستويات ${icon('forward')}</a>`
+                  : html`<button class="btn btn-ghost btn-sm" disabled>سجّل 5 تنويعات لاعتماد المجموعة</button>`}
+          ${next?.inGroup ? html`<a class="btn btn-quiet btn-sm" href="#/practice/${next.id}?step=1" style="margin-inline-start:auto" title="انتقل للجملة التالية مباشرة">التالية بالمجموعة (${next.position}/${next.total}) ${icon('forward')}</a>` : ''}
+        </div>
+      `;
+    };
 
     const goToStep = (target) => {
-      if (step === 4 && target !== 4) cancelVoice();
-      const nextStep = clamp(target, 1, 6);
+      if (step === 5 && target !== 5) cancelVoice();
+      const isLast = !next?.inGroup;
+      const maxSteps = isLast ? 5 : 4;
+      const nextStep = clamp(target, 1, maxSteps);
       if (nextStep > step) {
         audioEngine.playStepComplete(nextStep);
       } else if (nextStep < step) {
@@ -1042,7 +1096,7 @@ export const practiceScreen = {
       let micStream = null;
       try {
         micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (disposed || step !== 4 || nonce !== voice.nonce) {
+        if (disposed || step !== 5 || nonce !== voice.nonce) {
           micStream.getTracks().forEach((track) => track.stop());
           return;
         }
@@ -1066,7 +1120,7 @@ export const practiceScreen = {
         micRecorder.onstop = async () => {
           clearTimeout(voice.timer);
           micStream.getTracks().forEach((track) => track.stop());
-          if (nonce !== voice.nonce || disposed || step !== 4) return;
+          if (nonce !== voice.nonce || disposed || step !== 5) return;
           voice.recorder = null;
           voice.stream = null;
           if (!pieces.length) {
@@ -1081,7 +1135,7 @@ export const practiceScreen = {
           try {
             const bytes = new Uint8Array(await new Blob(pieces, { type: mime || micRecorder.mimeType }).arrayBuffer());
             const result = await window.chunkAPI.transcribeGermanAudio(bytes);
-            if (nonce !== voice.nonce || disposed || step !== 4) return;
+            if (nonce !== voice.nonce || disposed || step !== 5) return;
             voice.state = 'idle';
             voice.axis = '';
             if (result?.ok && result.text?.trim()) {
@@ -1224,10 +1278,23 @@ export const practiceScreen = {
           }
           audioEngine.playSetComplete(3);
           const covBefore = store.variationCoverage(chunk.id);
+          const gid = groupPos?.group?.id;
+          const grpDoneBefore = gid ? store.isGroupVariationDone(gid) : false;
+
           store.addVariation(chunk.id, axis, text);
+          if (gid) {
+            store.addGroupVariation(gid, axis, text);
+          }
           drafts[axis] = '';
           const covAfter = store.variationCoverage(chunk.id);
-          if (covAfter >= 4 && covBefore < 4) {
+          const grpDoneAfter = gid ? store.isGroupVariationDone(gid) : false;
+
+          if (grpDoneAfter && !grpDoneBefore) {
+            audioEngine.playNewPR();
+            showXPToast(50, '🎉 أتممت شرط الـ 5 تنويعات للمجموعة بالكامل (+50 XP)!');
+            toast('أتممت الـ 5 تنويعات للقالب — تم اعتماد إتقان المجموعة بنجاح!', 'spark');
+            showGroupMasterySummaryModal(chunk, groupPos?.group);
+          } else if (covAfter >= 4 && covBefore < 4) {
             showXPToast(15, 'سجلت تنويع جديد + بونص إكمال المحاور الأربعة (+10 XP)!');
           } else {
             showXPToast(5, `سجلت تنويع في محور ${store.axisTitle(axis)}`);
@@ -1235,11 +1302,17 @@ export const practiceScreen = {
           paint();
           break;
         }
-        case 'vary:del':
+        case 'vary:del': {
           audioEngine.playSoftError();
-          store.removeVariation(chunk.id, Number(target.dataset.index));
+          const idx = Number(target.dataset.index);
+          const gid = groupPos?.group?.id;
+          if (gid) {
+            store.removeGroupVariation(gid, idx);
+          }
+          store.removeVariation(chunk.id, idx);
           paint();
           break;
+        }
         case 'recall:start':
           openRecallDrill(chunk, {
             onDone: ({ passed, score, total }) => {
@@ -1250,7 +1323,7 @@ export const practiceScreen = {
               } else {
                 toast(passed ? 'استدعاء ممتاز' : `جبت ${score} من ${total} — جرّب تاني`, passed ? 'check' : 'clock');
               }
-              checkStep5Completion();
+              checkImmediateTestsCompletion();
               paint();
             },
           });
@@ -1265,7 +1338,7 @@ export const practiceScreen = {
               } else {
                 toast(`سجلت ${count} جمل في الدقيقة`, count >= 5 ? 'check' : 'clock');
               }
-              checkStep5Completion();
+              checkImmediateTestsCompletion();
               paint();
             },
           });
@@ -1280,7 +1353,7 @@ export const practiceScreen = {
               } else {
                 toast('اتسجل الكلام المرتجل', 'check');
               }
-              checkStep5Completion();
+              checkImmediateTestsCompletion();
               paint();
             },
           });
@@ -1288,7 +1361,7 @@ export const practiceScreen = {
         case 'delayed:start':
           if (!store.delayedReady(chunk.id)) {
             audioEngine.playSoftError();
-            toast('الاستدعاء المؤجل هيفتح بعد أسبوع من خطوة التنويع', 'clock');
+            toast('الاستدعاء المؤجل هيفتح بعد أسبوع من تدريب الجملة', 'clock');
             return;
           }
           openRecallDrill(chunk, {
@@ -1329,9 +1402,18 @@ export const practiceScreen = {
         case 'prev':
           goToStep(step - 1);
           break;
-        case 'next':
-          goToStep(step + 1);
+        case 'next': {
+          const isLast = !next?.inGroup;
+          const maxSteps = isLast ? 5 : 4;
+          if (step < maxSteps) {
+            goToStep(step + 1);
+          } else if (step === 4 && next?.inGroup) {
+            location.hash = `#/practice/${next.id}?step=1`;
+          } else if (step === 4 && isLast) {
+            goToStep(5);
+          }
           break;
+        }
         case 'finish':
           break;
         default:

@@ -106,6 +106,7 @@ export const reviewScreen = {
         <div class="review-card">
           <div class="prompt-label">
             <span class="chip ${isProduce ? 'chip-yellow' : ''}">${TYPE_LABEL[item.type]}</span>
+            ${chunk.groupTitle ? html`<span class="chip chip-blue de" style="font-size:11px">قالب: ${chunk.groupTitle}</span>` : ''}
             <span>${index + 1} من ${queue.length}</span>
           </div>
           <p class="sub muted" style="margin-bottom:10px">${TYPE_HINT[item.type]}</p>

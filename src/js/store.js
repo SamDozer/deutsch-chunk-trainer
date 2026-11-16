@@ -14,9 +14,8 @@ export const STAGES = [
   { key: 'understand', title: 'افهم الـChunk', short: 'افهم', hint: 'اقرأ، افهم المعنى، شوف الوظيفة' },
   { key: 'speak', title: 'انطقه بصوت عالي', short: 'انطق', hint: 'بطيء، طبيعي، وبعدين من غير ما تبص' },
   { key: 'produce', title: 'درّب عليه 30 إنتاج', short: 'درّب', hint: '10 + 5 + 5 + 5 + 5 على أيام' },
-  { key: 'vary', title: 'غيّر كل مرة', short: 'غيّر', hint: 'الفاعل، الزمن، الكلمات، الموقف' },
-  { key: 'test', title: 'اختبر نفسك', short: 'اختبر', hint: 'استدعاء، تنويع، سرعة، كلام' },
-  { key: 'mastery', title: 'اعتبره متقنًا', short: 'اتقن', hint: 'لما الشروط الخمسة تكتمل' },
+  { key: 'test', title: 'اختبر نفسك', short: 'اختبر', hint: 'استدعاء سريع، سرعة، كلام مرتجل' },
+  { key: 'vary', title: 'المرحلة الختامية: غيّر كل مرة', short: 'التنويع', hint: '5 تنويعات شاملة لقالب المجموعة' },
 ];
 
 export const PRODUCE_PLAN = [
@@ -76,25 +75,50 @@ const defaultState = () => ({
   pointer: null,
   days: {},
   chunks: {},
+  groups: {},
   reviews: [],
   meta: { importedObsidian: false, importedAt: null, importedCount: 0 },
 });
 
-function stageFlags(rec) {
+export function getChunkGroupInfo(chunk, levelId) {
+  if (!chunk) return { groupId: 'other', title: 'عبارات متنوعة', key: 'other' };
+  const lv = levelId || chunk.level || (chunk.id ? chunk.id.split('-')[0] : 'A1');
+  let title = (chunk.template || '').trim();
+  if (!title && chunk.family) {
+    const famPart = chunk.family.split(':')[1] || chunk.family;
+    title = famPart.trim();
+  }
+  if (!title) {
+    const words = (chunk.de || '').trim().split(/\s+/).slice(0, 2).join(' ');
+    title = words ? `${words} …` : 'عبارات متنوعة';
+  }
+  const cleanKey = title.replace(/[.…]+$/, '').trim().toLowerCase();
+  return {
+    groupId: `${lv}::${cleanKey}`,
+    title: title.includes('…') ? title : `${title} …`,
+    key: cleanKey,
+  };
+}
+
+function stageFlags(rec, groupVariationDone = false) {
   const speak = rec.speak?.passes?.slow && rec.speak?.passes?.natural && rec.speak?.passes?.blind;
-  const variationTestDone = (rec.vary?.items?.length || 0) >= 5 || (rec.test?.variation?.count || 0) >= 5 || Boolean(rec.vary?.importedDone);
   const immediateTestsPassed = Boolean(
     rec.test?.recall?.passed &&
       rec.test?.sprint?.count >= 5 &&
-      rec.test?.speaking?.seconds >= 30 &&
-      variationTestDone,
+      rec.test?.speaking?.seconds >= 30,
   );
+  const variationDone =
+    groupVariationDone ||
+    (rec.vary?.items?.length || 0) >= 5 ||
+    (rec.test?.variation?.count || 0) >= 5 ||
+    Boolean(rec.vary?.importedDone);
+
   return [
     Boolean(rec.understand?.done),
     Boolean(speak),
     (rec.produce?.total || 0) >= 10,
-    (rec.vary?.items?.length || 0) >= 4 || Boolean(rec.vary?.importedDone),
     immediateTestsPassed,
+    variationDone,
     Boolean(rec.mastery?.done),
   ];
 }
@@ -111,19 +135,31 @@ class Store {
   }
 
   async init() {
-    const payload = this.api
-      ? await this.api.getChunks()
-      : await (await fetch(new URL('../../data/chunks.json', import.meta.url))).json();
+    let payload = null;
+    if (this.api) {
+      payload = await this.api.getChunks();
+    } else if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      payload = await (await fetch(new URL('../../data/chunks.json', import.meta.url))).json();
+    } else {
+      const fs = await import('node:fs');
+      payload = JSON.parse(fs.readFileSync(new URL('../../data/chunks.json', import.meta.url), 'utf8'));
+    }
     if (!payload || !payload.levels) throw new Error('ملفات الشانكس مش موجودة');
     this.data = payload;
     this.levels = payload.levels.map((level) => ({
       ...level,
-      chunks: level.chunks.map((chunk, index) => ({
-        ...chunk,
-        level: level.id,
-        levelTitle: level.title,
-        index,
-      })),
+      chunks: level.chunks.map((chunk, index) => {
+        const groupInfo = getChunkGroupInfo(chunk, level.id);
+        return {
+          ...chunk,
+          level: level.id,
+          levelTitle: level.title,
+          index,
+          groupId: groupInfo.groupId,
+          groupTitle: groupInfo.title,
+          groupKey: groupInfo.key,
+        };
+      }),
     }));
     this.byId = new Map();
     this.levelMap = new Map();
@@ -165,6 +201,7 @@ class Store {
       settings: { ...base.settings, ...(loaded.settings || {}) },
       days: loaded.days || {},
       chunks: loaded.chunks || {},
+      groups: loaded.groups || {},
       reviews: loaded.reviews || [],
       meta: { ...base.meta, ...(loaded.meta || {}) },
       pointer: loaded.pointer || null,
@@ -176,6 +213,34 @@ class Store {
         continue;
       }
       state.chunks[id] = this.normalizeRecord(rec);
+    }
+    // Auto-migrate any existing chunk variations into group variations (Zero Data Loss)
+    for (const [id, rec] of Object.entries(state.chunks)) {
+      if (!rec.vary?.items?.length && !rec.vary?.importedDone) continue;
+      const lv = id.split('-')[0];
+      const chunk = this.byId?.get(id);
+      const groupInfo = getChunkGroupInfo(chunk || { id }, lv);
+      const gid = groupInfo.groupId;
+      if (!state.groups[gid]) {
+        state.groups[gid] = { variations: [], done: false, at: null };
+      }
+      const grp = state.groups[gid];
+      if (rec.vary?.importedDone) grp.done = true;
+      for (const item of rec.vary?.items || []) {
+        const text = String(item.text || '').trim();
+        if (!text) continue;
+        const exists = grp.variations.some(
+          (v) => v.text.trim().toLowerCase() === text.toLowerCase(),
+        );
+        if (!exists) {
+          grp.variations.push({
+            axis: item.axis || 'words',
+            text,
+            at: item.at || nowIso(),
+          });
+        }
+      }
+      if (grp.variations.length >= 5) grp.done = true;
     }
     for (const day of Object.values(state.days)) {
       if (Array.isArray(day.chunks)) {
@@ -213,7 +278,7 @@ class Store {
     this.state.updatedAt = nowIso();
     try {
       if (this.api) await this.api.saveState(this.state);
-      else localStorage.setItem('chunk-trainer-state', JSON.stringify(this.state));
+      else if (typeof localStorage !== 'undefined') localStorage.setItem('chunk-trainer-state', JSON.stringify(this.state));
       this.onSaved?.(this.state.updatedAt);
     } catch (error) {
       console.error('save failed', error);
@@ -262,7 +327,11 @@ class Store {
 
   stageFlags(id) {
     const rec = this.peek(id);
-    return stageFlags(rec || emptyRecord());
+    const chunk = this.chunk(id);
+    const lv = this.levelOf(id);
+    const gid = chunk?.groupId || (chunk ? getChunkGroupInfo(chunk, lv).groupId : null);
+    const groupDone = gid ? this.isGroupVariationDone(gid) : false;
+    return stageFlags(rec || emptyRecord(), groupDone);
   }
 
   stageDone(id, stageIndex) {
@@ -290,7 +359,7 @@ class Store {
     const doneBatches = batches.filter((b) => b.done).length;
     const nextBatch = batches.find((b) => !b.done);
     if (prodTotal >= 30) {
-      return { code: 'all_sessions', label: '30/30 إنتاج مكتمل', step: 5 };
+      return { code: 'all_sessions', label: '30/30 إنتاج مكتمل', step: 4 };
     }
     if (prodTotal >= 10) {
       if (nextBatch?.overdue) {
@@ -303,15 +372,22 @@ class Store {
     }
     const currentStep = this.currentStep(id);
     if (currentStep > 1) {
-      return { code: 'learning', label: `خطوة ${currentStep} من 6`, step: currentStep };
+      return { code: 'learning', label: `خطوة ${currentStep} من 4`, step: currentStep };
     }
     return { code: 'new', label: 'جديد', step: 1 };
   }
 
   currentStep(id) {
     const flags = this.stageFlags(id);
-    const missing = flags.findIndex((flag) => !flag);
-    return missing === -1 ? 6 : missing + 1;
+    if (!flags[0]) return 1;
+    if (!flags[1]) return 2;
+    if (!flags[2]) return 3;
+    if (!flags[3]) return 4;
+    const groupPos = this.getGroupPosition(id);
+    if (groupPos && !groupPos.nextChunk && !flags[4]) {
+      return 5;
+    }
+    return 4;
   }
 
   // ---------- day / stats ----------
@@ -376,6 +452,21 @@ class Store {
     if (rec.vary.items.length >= 5) rec.test.variation.at = rec.test.variation.at || nowIso();
     rec.lastAt = nowIso();
     if (!this.day().chunks.includes(id)) this.day().chunks.push(id);
+
+    // Sync to group
+    const chunk = this.chunk(id);
+    const lv = this.levelOf(id);
+    const gid = chunk?.groupId || (chunk ? getChunkGroupInfo(chunk, lv).groupId : null);
+    if (gid) {
+      const grp = this.getGroupRecord(gid);
+      const exists = grp.variations.some((v) => v.text.trim().toLowerCase() === clean.toLowerCase());
+      if (!exists) {
+        grp.variations.push({ axis, text: clean, at: nowIso() });
+        grp.at = nowIso();
+        if (grp.variations.length >= 5) grp.done = true;
+      }
+    }
+
     this.touch();
   }
 
@@ -388,7 +479,16 @@ class Store {
 
   variationCoverage(id) {
     const rec = this.record(id);
-    const axes = new Set(rec.vary.items.map((item) => item.axis));
+    const chunk = this.chunk(id);
+    const axes = new Set((rec.vary?.items || []).map((item) => item.axis));
+    const lv = this.levelOf(id);
+    const gid = chunk?.groupId || (chunk ? getChunkGroupInfo(chunk, lv).groupId : null);
+    if (gid) {
+      const groupVars = this.getGroupVariations(gid);
+      for (const gv of groupVars) {
+        if (gv.axis) axes.add(gv.axis);
+      }
+    }
     return VARIATION_AXES.filter((axis) => axes.has(axis.key)).length;
   }
 
@@ -399,6 +499,137 @@ class Store {
     return level.chunks
       .filter((c) => c.family === chunk.family && c.id !== id)
       .slice(0, limit);
+  }
+
+  // ---------- chunk groups & template packs ----------
+
+  getGroupRecord(groupId) {
+    if (!this.state.groups) this.state.groups = {};
+    if (!this.state.groups[groupId]) {
+      this.state.groups[groupId] = { variations: [], done: false, at: null };
+    }
+    return this.state.groups[groupId];
+  }
+
+  isGroupVariationDone(groupId) {
+    const rec = this.state.groups?.[groupId];
+    if (!rec) return false;
+    return Boolean(rec.done || (rec.variations?.length || 0) >= 5);
+  }
+
+  getGroupVariations(groupId) {
+    return this.state.groups?.[groupId]?.variations || [];
+  }
+
+  addGroupVariation(groupId, axis, text) {
+    const clean = String(text || '').trim();
+    if (!clean) return 0;
+    const rec = this.getGroupRecord(groupId);
+    const exists = rec.variations.some((v) => v.text.trim().toLowerCase() === clean.toLowerCase());
+    if (!exists) {
+      rec.variations.push({ axis: axis || 'words', text: clean, at: nowIso() });
+      rec.at = nowIso();
+    }
+    if (rec.variations.length >= 5) {
+      rec.done = true;
+    }
+    this.touch();
+    return rec.variations.length;
+  }
+
+  removeGroupVariation(groupId, index) {
+    const rec = this.getGroupRecord(groupId);
+    rec.variations.splice(index, 1);
+    rec.done = rec.variations.length >= 5;
+    this.touch();
+  }
+
+  setGroupVariationDone(groupId, done = true) {
+    const rec = this.getGroupRecord(groupId);
+    rec.done = Boolean(done);
+    rec.at = nowIso();
+    this.touch();
+  }
+
+  getGroups(levelId) {
+    const level = this.level(levelId);
+    if (!level) return [];
+    const map = new Map();
+    for (const chunk of level.chunks) {
+      const gid = chunk.groupId;
+      if (!map.has(gid)) {
+        map.set(gid, {
+          id: gid,
+          levelId,
+          title: chunk.groupTitle,
+          key: chunk.groupKey,
+          chunks: [],
+        });
+      }
+      map.get(gid).chunks.push(chunk);
+    }
+    const list = [];
+    for (const grp of map.values()) {
+      let masteredCount = 0;
+      let learningCount = 0;
+      for (const c of grp.chunks) {
+        const st = this.status(c.id);
+        if (st === 'mastered') masteredCount++;
+        else if (st === 'learning') learningCount++;
+      }
+      const total = grp.chunks.length;
+      const isMastered = total > 0 && masteredCount === total;
+      const firstUnfinished =
+        grp.chunks.find((c) => this.status(c.id) === 'learning') ||
+        grp.chunks.find((c) => this.status(c.id) !== 'mastered') ||
+        grp.chunks[0];
+      const varDone = this.isGroupVariationDone(grp.id);
+      const varCount = this.getGroupVariations(grp.id).length;
+      list.push({
+        ...grp,
+        total,
+        masteredCount,
+        learningCount,
+        freshCount: total - masteredCount - learningCount,
+        isMastered,
+        pct: Math.round((masteredCount / total) * 100),
+        firstUnfinished,
+        variationDone: varDone,
+        variationCount: varCount,
+      });
+    }
+    return list;
+  }
+
+  getGroup(groupId) {
+    const [levelId] = String(groupId || '').split('::');
+    const groups = this.getGroups(levelId);
+    return groups.find((g) => g.id === groupId) || null;
+  }
+
+  getGroupForChunk(chunkId) {
+    const chunk = this.chunk(chunkId);
+    if (!chunk) return null;
+    const groups = this.getGroups(chunk.level);
+    return groups.find((g) => g.id === chunk.groupId) || null;
+  }
+
+  getGroupPosition(chunkId) {
+    const chunk = this.chunk(chunkId);
+    if (!chunk) return null;
+    const group = this.getGroupForChunk(chunkId);
+    if (!group) return null;
+    const index = group.chunks.findIndex((c) => c.id === chunkId);
+    const prevChunk = index > 0 ? group.chunks[index - 1] : null;
+    const nextChunk = index >= 0 && index < group.chunks.length - 1 ? group.chunks[index + 1] : null;
+    return {
+      group,
+      index,
+      position: index + 1,
+      total: group.total,
+      prevChunk,
+      nextChunk,
+    };
   }
 
   // ---------- tests & mastery ----------
@@ -474,9 +705,10 @@ class Store {
 
   delayedDue(id) {
     const rec = this.peek(id);
-    if (!rec || !rec.vary.at || rec.test.delayed.passed) return null;
-    if (rec.vary.items.length < 4 && !rec.vary.importedDone) return null;
-    return addDays(new Date(rec.vary.at), 7);
+    if (!rec || rec.test?.delayed?.passed) return null;
+    const refAt = rec.mastery?.at || rec.vary?.at || rec.test?.recall?.at || rec.lastAt;
+    if (!refAt) return null;
+    return addDays(new Date(refAt), 7);
   }
 
   delayedReady(id) {
@@ -486,7 +718,7 @@ class Store {
 
   masteryReady(id) {
     const flags = this.stageFlags(id);
-    return flags.slice(0, 5).every(Boolean);
+    return Boolean(flags[0] && flags[1] && flags[2] && flags[3]);
   }
 
   completeMastery(id) {
