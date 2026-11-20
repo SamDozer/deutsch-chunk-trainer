@@ -24,4 +24,7 @@ Thumbs.db
 # Temporary test & scratch files
 scratch/
 graphify-out/
+shots/
+*.bak
+*.tmp
 

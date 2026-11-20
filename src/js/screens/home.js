@@ -20,7 +20,8 @@ function focusCard(chunk, step) {
       <div class="focus-top">
         <span class="chip is-level">${chunk.level}</span>
         <span class="focus-id">${chunk.id}</span>
-        ${chunk.template ? html`<span class="chip">قالب: ${chunk.template}</span>` : ''}
+        ${chunk.groupTitle ? html`<span class="chip chip-blue">${chunk.groupTitle}</span>` : ''}
+        ${chunk.template || chunk.patternKey ? html`<span class="chip">قالب: ${chunk.template || chunk.patternKey}</span>` : ''}
       </div>
       <div class="de focus-de">${chunk.de}</div>
       <div class="focus-ar">${chunk.ar}</div>
@@ -47,7 +48,7 @@ function levelRow(level) {
       <div class="level-body">
         <div class="level-title-row">
           <h3>${level.title}</h3>
-          <span class="level-count">${chunksLabel(level.count)}</span>
+          <span class="level-count">${chunksLabel(level.count)} · ${store.getGroups(level.id).length} مجموعة منوعة</span>
           ${stats.mastered > 0 ? html`<span class="chip chip-green">${stats.mastered} متقن</span>` : ''}
           ${stats.learning > 0 ? html`<span class="chip">${stats.learning} شغال عليه</span>` : ''}
         </div>

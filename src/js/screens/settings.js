@@ -1,5 +1,6 @@
 import { store } from '../store.js';
 import { audioEngine } from '../audioEngine.js';
+import { reviewScheduler } from '../scheduler.js';
 import { html, icon, speech, chunksLabel } from '../utils.js';
 import { toast, confirmDialog } from '../ui.js';
 
@@ -101,25 +102,53 @@ export const settingsScreen = {
             </section>
 
             <section class="set-group">
-              <div class="set-group-head"><h2>الصوت الألماني</h2><p>نطق الجمل من غير ما تسيب الشاشة</p></div>
-              ${switchRow('tts', 'تشغيل الصوت', 'زرار السماع في خطوة النطق بيشتغل بالصوت الألماني المثبت على الجهاز.', settings.tts !== false)}
+              <div class="set-group-head">
+                <h2>تنبيهات ومواعيد المراجعة</h2>
+                <p>إشعارات نظام ويندوز والمنبه الصوتي اللطيف في مواعيد التكرار المتباعد</p>
+              </div>
+              ${switchRow(
+                'notificationsEnabled',
+                'إشعارات ويندوز للمراجعة',
+                'إشعار مكتبي هادئ يظهر تلقائيًا عند وصول موعد أي مراجعة مجدولة للمراحل الأربع',
+                settings.notificationsEnabled !== false,
+              )}
+              ${switchRow(
+                'reviewChimeEnabled',
+                'المنبه الصوتي الخفيف (تيت تيت)',
+                'نغمتين هادئتين خفيفتين جداً (880Hz / 987Hz) مع كل إشعار بدون أي إزعاج',
+                settings.reviewChimeEnabled !== false,
+              )}
+              <div class="set-row">
+                <div>
+                  <div class="set-label">تجربة الإشعار والمنبه الصوتي</div>
+                  <div class="set-desc">اختبر صوت المنبه اللطيف وشكل إشعار ويندوز فوراً للتأكد من عملهم</div>
+                </div>
+                <button class="btn btn-ghost btn-sm" data-act="test-notification-chime">
+                  ${icon('bell')} تجربة الإشعار والصوت
+                </button>
+              </div>
+            </section>
+
+            <section class="set-group">
+              <div class="set-group-head"><h2>الصوت الألماني</h2><p>نطق الجمل بصوت ويندوز المدمج (SpeechSynthesis)</p></div>
+              ${switchRow('tts', 'تشغيل الصوت', 'تشغيل نطق الجمل الألمانية تلقائياً وعبر أزرار الاستماع بمحرك ويندوز.', settings.tts !== false)}
               ${rangeRow(
                 'ttsRate',
-                'سرعة النطق',
-                '0.62 للبطيء، و0.95 للطبيعي. تقدر تغيّرها من غير ما تسيب الجملة.',
-                settings.ttsRate,
+                'سرعة النطق الافتراضية',
+                '0.75 للبطيء و1.00 للطبيعي.',
+                settings.ttsRate || 1.0,
                 0.5,
-                1.2,
+                1.5,
                 0.05,
                 (value) => `${Number(value).toFixed(2)}×`,
               )}
               <div class="set-row">
                 <div>
-                  <div class="set-label">صوت النطق</div>
-                  <div class="set-desc">${voices.length ? 'اختار الصوت الألماني اللي يعجبك.' : 'مفيش صوت ألماني متسطّب — من إعدادات ويندوز: الوقت واللغة ← اللغة ← إضافة لغة Deutsch.'}</div>
+                  <div class="set-label">محرك النطق</div>
+                  <div class="set-desc">${voices.length ? 'اختار الصوت الألماني المناسب من أصوات ويندوز المتاحة.' : 'مفيش صوت ألماني متسطّب على ويندوز — ثبّت لغة Deutsch من إعدادات ويندوز.'}</div>
                 </div>
                 <div class="voice-list" id="voice-list">
-                  <button class="voice-chip ${!settings.voice ? 'is-on' : ''}" data-voice="">افتراضي</button>
+                  <button class="voice-chip ${!settings.voice ? 'is-on' : ''}" data-voice="">افتراضي (ويندوز)</button>
                   ${voices.map(
                     (voice) => html`<button class="voice-chip ${settings.voice === voice.name ? 'is-on' : ''}" data-voice="${voice.name}" title="${voice.name}">${voice.name}</button>`,
                   )}
@@ -295,6 +324,29 @@ export const settingsScreen = {
           setTheme(settings.theme === 'dark' ? 'light' : 'dark');
           return;
         }
+        if (key === 'notificationsEnabled') {
+          const nextVal = settings.notificationsEnabled === false ? true : false;
+          if (nextVal) {
+            const granted = await reviewScheduler.requestPermission();
+            if (!granted) {
+              toast('إذن الإشعارات مش مفعل في المتصفح / النظام', 'lock');
+            }
+          }
+          store.setSetting('notificationsEnabled', nextVal);
+          toggle.classList.toggle('is-on', nextVal);
+          toggle.setAttribute('aria-checked', nextVal ? 'true' : 'false');
+          toast(nextVal ? 'تم تفعيل إشعارات ويندوز 🔔' : 'تم تعطيل إشعارات ويندوز 🔕', nextVal ? 'spark' : 'lock');
+          return;
+        }
+        if (key === 'reviewChimeEnabled') {
+          const nextVal = settings.reviewChimeEnabled === false ? true : false;
+          store.setSetting('reviewChimeEnabled', nextVal);
+          toggle.classList.toggle('is-on', nextVal);
+          toggle.setAttribute('aria-checked', nextVal ? 'true' : 'false');
+          if (nextVal) audioEngine.playReviewChime(true);
+          toast(nextVal ? 'تم تفعيل منبه المراجعة (تيت تيت) 🎵' : 'تم كتم منبه المراجعة 🔇', nextVal ? 'speaker' : 'speaker-off');
+          return;
+        }
         const next = !settings[key];
         store.setSetting(key, next);
         toggle.classList.toggle('is-on', next);
@@ -327,6 +379,9 @@ export const settingsScreen = {
         audioEngine.playStepper('down');
       } else if (action === 'test-soft-error') {
         audioEngine.playSoftError();
+      } else if (action === 'test-notification-chime') {
+        await reviewScheduler.testNotificationAndChime();
+        toast('تم تشغيل المنبه الصوتي وعرض إشعار ويندوز بنجاح ✨', 'spark');
       } else if (action === 'test-voice') {
         const ok = await speech.speak('Ich möchte einen Kaffee.', {
           rate: settings.ttsRate,

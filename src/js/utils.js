@@ -82,6 +82,56 @@ export const timeLabel = (date) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+export const formatTime12 = (date) => {
+  const d = date instanceof Date ? date : new Date(date);
+  let h = d.getHours();
+  const m = pad(d.getMinutes());
+  const period = h >= 12 ? 'م' : 'ص';
+  h = h % 12 || 12;
+  return `${pad(h)}:${m} ${period}`;
+};
+
+export function formatExactDateTime(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const diff = daysBetween(new Date(), d);
+  const time = formatTime12(d);
+  if (diff === 0) return `اليوم — ${time}`;
+  if (diff === 1) return `بكرة — ${time}`;
+  if (diff === -1) return `أمس — ${time}`;
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} — ${time}`;
+}
+
+export function formatCountdown(targetDate) {
+  if (!targetDate) return { isDue: false, text: '—', diffMs: 0 };
+  const target = targetDate instanceof Date ? targetDate : new Date(targetDate);
+  if (isNaN(target.getTime())) return { isDue: false, text: '—', diffMs: 0 };
+  const diffMs = target.getTime() - Date.now();
+  if (diffMs <= 0) {
+    return { isDue: true, text: 'مستحق الآن', diffMs };
+  }
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const totalHours = Math.floor(totalMinutes / 60);
+  const totalDays = Math.floor(totalHours / 24);
+  const remHours = totalHours % 24;
+  const remMinutes = totalMinutes % 60;
+
+  let text = '';
+  if (totalDays > 0) {
+    const dText = totalDays === 1 ? 'يوم' : totalDays === 2 ? 'يومين' : `${totalDays} أيام`;
+    const hText = remHours > 0 ? ` و ${remHours === 1 ? 'ساعة' : remHours === 2 ? 'ساعتين' : `${remHours} ساعات`}` : '';
+    text = `متبقي ${dText}${hText}`;
+  } else if (totalHours > 0) {
+    const hText = totalHours === 1 ? 'ساعة' : totalHours === 2 ? 'ساعتين' : `${totalHours} ساعات`;
+    const mText = remMinutes > 0 ? ` و ${remMinutes === 1 ? 'دقيقة' : remMinutes === 2 ? 'دقيقتين' : `${remMinutes} دقيقة`}` : '';
+    text = `متبقي ${hText}${mText}`;
+  } else {
+    text = remMinutes <= 1 ? 'متبقي أقل من دقيقة' : remMinutes === 2 ? 'متبقي دقيقتين' : `متبقي ${remMinutes} دقيقة`;
+  }
+  return { isDue: false, text, diffMs, totalMinutes };
+}
+
 export function dueLabel(due) {
   if (!due) return '';
   const diff = daysBetween(new Date(), new Date(due));
@@ -142,35 +192,82 @@ export const mmss = formatClock;
 
 export const progressPct = (part, total) => (total > 0 ? clamp(Math.round((part / total) * 100), 0, 100) : 0);
 
-/** German speech playback with a graceful fallback when no German voice exists. */
+/** German speech playback powered natively by Windows Web Speech (speechSynthesis). */
 export const speech = {
+  _speakNonce: 0,
+  _activeUtterance: null,
+  _speakTimer: null,
+
   get supported() {
     return typeof window !== 'undefined' && 'speechSynthesis' in window;
   },
   germanVoices() {
-    if (!this.supported) return [];
-    return speechSynthesis.getVoices().filter((v) => /^de/i.test(v.lang));
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      return speechSynthesis.getVoices().filter((v) => /^de/i.test(v.lang));
+    }
+    return [];
   },
   allVoices() {
-    if (!this.supported) return [];
-    return speechSynthesis.getVoices();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      return speechSynthesis.getVoices();
+    }
+    return [];
   },
   stop() {
-    if (this.supported) speechSynthesis.cancel();
+    this._speakNonce += 1;
+    if (this._speakTimer) {
+      clearTimeout(this._speakTimer);
+      this._speakTimer = null;
+    }
+    this._activeUtterance = null;
+    if (typeof window !== 'undefined') {
+      window._activeUtterance = null;
+      if ('speechSynthesis' in window) {
+        speechSynthesis.cancel();
+      }
+    }
   },
-  speak(text, { rate = 0.95, voiceName = '' } = {}) {
-    if (!this.supported) return Promise.resolve(false);
-    speechSynthesis.cancel();
+  async speak(text, { rate = 1.0, voiceName = '', onStart, onEnd } = {}) {
+    if (!this.supported || !text || !text.trim()) return Promise.resolve(false);
+    this.stop();
+    const nonce = this._speakNonce;
+
     return new Promise((resolve) => {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'de-DE';
-      utter.rate = rate;
-      const voices = this.germanVoices();
-      const chosen = voices.find((v) => v.name === voiceName) || voices[0];
-      if (chosen) utter.voice = chosen;
-      utter.onend = () => resolve(true);
-      utter.onerror = () => resolve(false);
-      speechSynthesis.speak(utter);
+      this._speakTimer = setTimeout(() => {
+        if (this._speakNonce !== nonce) return resolve(false);
+        const utter = new SpeechSynthesisUtterance(text.trim());
+        this._activeUtterance = utter;
+        if (typeof window !== 'undefined') {
+          window._activeUtterance = utter;
+        }
+        utter.lang = 'de-DE';
+        utter.rate = Math.max(0.5, Math.min(2.0, Number(rate) || 1.0));
+
+        const voices = this.germanVoices();
+        const chosen = (voiceName && voices.find((v) => v.name === voiceName)) || voices.find((v) => /^de/i.test(v.lang)) || voices[0];
+        if (chosen) utter.voice = chosen;
+
+        if (typeof onStart === 'function') {
+          utter.onstart = () => {
+            if (this._speakNonce === nonce) onStart();
+          };
+        }
+
+        const finish = (result) => {
+          this._activeUtterance = null;
+          if (typeof window !== 'undefined') {
+            window._activeUtterance = null;
+          }
+          if (typeof onEnd === 'function') {
+            onEnd();
+          }
+          resolve(result);
+        };
+
+        utter.onend = () => finish(true);
+        utter.onerror = () => finish(false);
+        speechSynthesis.speak(utter);
+      }, 40);
     });
   },
 };

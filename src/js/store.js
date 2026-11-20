@@ -8,6 +8,8 @@ import {
   dayStart,
   debounce,
   daysBetween,
+  formatExactDateTime,
+  formatCountdown,
 } from './utils.js';
 
 export const STAGES = [
@@ -25,6 +27,93 @@ export const PRODUCE_PLAN = [
   { amount: 5, label: 'بعد 3 أيام', sub: 'مراجعة', hours: 72 },
   { amount: 5, label: 'بعد 7 أيام', sub: 'مراجعة', hours: 168 },
 ];
+
+export const SR_INTERVALS = [
+  { stage: 1, label: 'المرحلة 1: بعد عدة ساعات', shortLabel: 'بعد عدة ساعات', sub: 'نفس اليوم', hours: 4 },
+  { stage: 2, label: 'المرحلة 2: اليوم التالي', shortLabel: 'اليوم التالي', sub: 'بعد 24 ساعة', hours: 24 },
+  { stage: 3, label: 'المرحلة 3: بعد 3 أيام', shortLabel: 'بعد 3 أيام', sub: 'مراجعة', hours: 72 },
+  { stage: 4, label: 'المرحلة 4: بعد 7 أيام', shortLabel: 'بعد 7 أيام', sub: 'مراجعة نهائية', hours: 168 },
+];
+
+export function createInitialSrSchedule(baseDateIso = null) {
+  const base = baseDateIso ? new Date(baseDateIso) : new Date();
+  const validBase = isNaN(base.getTime()) ? new Date() : base;
+  const stages = SR_INTERVALS.map((intv) => ({
+    stage: intv.stage,
+    label: intv.label,
+    shortLabel: intv.shortLabel,
+    sub: intv.sub,
+    hours: intv.hours,
+    scheduledAt: addHours(validBase, intv.hours).toISOString(),
+    completedAt: null,
+    done: false,
+  }));
+  return {
+    createdAt: validBase.toISOString(),
+    lastReviewedAt: null,
+    currentStage: 1,
+    nextReviewAt: stages[0].scheduledAt,
+    notifiedStage: 0,
+    stages,
+  };
+}
+
+export function normalizeSrSchedule(sch, rec) {
+  if (rec?.srOptOut) return null;
+  if (!sch || typeof sch !== 'object') {
+    const hasProgress = (rec.produce?.total || 0) > 0 || rec.mastery?.done || rec.understand?.done;
+    if (hasProgress) {
+      const baseAt = rec.produce?.log?.[0]?.at || rec.understand?.at || rec.lastAt || nowIso();
+      const init = createInitialSrSchedule(baseAt);
+      const prodTotal = rec.produce?.total || 0;
+      if (prodTotal >= 15 && init.stages[0]) {
+        init.stages[0].done = true;
+        init.stages[0].completedAt = rec.produce?.log?.[1]?.at || baseAt;
+      }
+      if (prodTotal >= 20 && init.stages[1]) {
+        init.stages[1].done = true;
+        init.stages[1].completedAt = rec.produce?.log?.[2]?.at || baseAt;
+      }
+      if (prodTotal >= 25 && init.stages[2]) {
+        init.stages[2].done = true;
+        init.stages[2].completedAt = rec.produce?.log?.[3]?.at || baseAt;
+      }
+      if ((prodTotal >= 30 || rec.mastery?.done) && init.stages[3]) {
+        init.stages[3].done = true;
+        init.stages[3].completedAt = rec.produce?.log?.[4]?.at || rec.mastery?.at || baseAt;
+      }
+      const firstUndone = init.stages.find((s) => !s.done);
+      init.currentStage = firstUndone ? firstUndone.stage : 5;
+      init.nextReviewAt = firstUndone ? firstUndone.scheduledAt : null;
+      init.notifiedStage = firstUndone ? 0 : 5;
+      return init;
+    }
+    return null;
+  }
+  const stages = SR_INTERVALS.map((intv, idx) => {
+    const existing = sch.stages?.[idx] || {};
+    return {
+      stage: intv.stage,
+      label: intv.label,
+      shortLabel: intv.shortLabel,
+      sub: intv.sub,
+      hours: intv.hours,
+      scheduledAt: existing.scheduledAt || addHours(new Date(sch.createdAt || nowIso()), intv.hours).toISOString(),
+      completedAt: existing.completedAt || null,
+      done: Boolean(existing.done),
+    };
+  });
+  const firstUndone = stages.find((s) => !s.done);
+  const isFullyDone = !firstUndone || (rec?.produce?.total || 0) >= 30 || Boolean(rec?.mastery?.done && stages.every((s) => s.done));
+  return {
+    createdAt: sch.createdAt || nowIso(),
+    lastReviewedAt: sch.lastReviewedAt || null,
+    currentStage: typeof sch.currentStage === 'number' ? sch.currentStage : (firstUndone ? firstUndone.stage : 5),
+    nextReviewAt: sch.nextReviewAt !== undefined ? sch.nextReviewAt : (firstUndone ? firstUndone.scheduledAt : null),
+    notifiedStage: typeof sch.notifiedStage === 'number' ? (isFullyDone && !firstUndone ? 5 : sch.notifiedStage) : (firstUndone ? 0 : 5),
+    stages,
+  };
+}
 
 export const VARIATION_AXES = [
   { key: 'subject', title: 'غيّر الفاعل', hint: 'مثال: ich ← wir / du / er / die Leute' },
@@ -53,6 +142,7 @@ const emptyRecord = () => ({
   },
   mastery: { done: false, at: null },
   review: { due: null, interval: 0, reps: 0, lastGrade: null, lastAt: null },
+  srSchedule: null,
   seconds: 0,
   lastAt: null,
   imported: [],
@@ -65,6 +155,8 @@ const defaultSettings = () => ({
   tts: true,
   ttsRate: 0.95,
   voice: '',
+  notificationsEnabled: true,
+  reviewChimeEnabled: true,
 });
 
 const defaultState = () => ({
@@ -83,6 +175,13 @@ const defaultState = () => ({
 export function getChunkGroupInfo(chunk, levelId) {
   if (!chunk) return { groupId: 'other', title: 'عبارات متنوعة', key: 'other' };
   const lv = levelId || chunk.level || (chunk.id ? chunk.id.split('-')[0] : 'A1');
+  if (chunk.groupId && chunk.groupTitle) {
+    return {
+      groupId: chunk.groupId,
+      title: chunk.groupTitle,
+      key: chunk.groupKey || chunk.groupId.split('::')[1] || chunk.groupId,
+    };
+  }
   let title = (chunk.template || '').trim();
   if (!title && chunk.family) {
     const famPart = chunk.family.split(':')[1] || chunk.family;
@@ -150,14 +249,19 @@ class Store {
       ...level,
       chunks: level.chunks.map((chunk, index) => {
         const groupInfo = getChunkGroupInfo(chunk, level.id);
+        const gNum = chunk.groupNumber || (chunk.groupId ? parseInt(chunk.groupId.split('::group-')[1], 10) : index + 1);
         return {
           ...chunk,
           level: level.id,
           levelTitle: level.title,
           index,
-          groupId: groupInfo.groupId,
-          groupTitle: groupInfo.title,
-          groupKey: groupInfo.key,
+          groupId: chunk.groupId || groupInfo.groupId,
+          groupTitle: chunk.groupTitle || (chunk.groupId && gNum ? `المجموعة ${gNum}` : groupInfo.title),
+          groupKey: chunk.groupKey || groupInfo.key,
+          groupNumber: gNum,
+          groupOrder: chunk.groupOrder || (index + 1),
+          isAnchor: Boolean(chunk.isAnchor),
+          isCapstone: Boolean(chunk.isCapstone),
         };
       }),
     }));
@@ -252,7 +356,7 @@ class Store {
 
   normalizeRecord(rec) {
     const base = emptyRecord();
-    return {
+    const normalized = {
       ...base,
       ...rec,
       understand: { ...base.understand, ...(rec.understand || {}) },
@@ -270,6 +374,8 @@ class Store {
       review: { ...base.review, ...(rec.review || {}) },
       imported: rec.imported || [],
     };
+    normalized.srSchedule = normalizeSrSchedule(rec.srSchedule, normalized);
+    return normalized;
   }
 
   // ---------- persistence ----------
@@ -408,6 +514,7 @@ class Store {
     rec.produce.log.push({ at, amount });
     rec.produce.total = rec.produce.log.reduce((sum, entry) => sum + entry.amount, 0);
     rec.lastAt = at;
+    this.ensureSrSchedule(id, rec.produce.log[0]?.at || at);
     if (!this.day().chunks.includes(id)) this.day().chunks.push(id);
     this.day().prod += amount;
     this.touch();
@@ -585,8 +692,19 @@ class Store {
         grp.chunks[0];
       const varDone = this.isGroupVariationDone(grp.id);
       const varCount = this.getGroupVariations(grp.id).length;
+      const uniqueTemplates = Array.from(
+        new Set(
+          grp.chunks
+            .map((c) => c.template || c.patternKey || (c.family ? c.family.split(':')[1] : null) || c.de.split(/\s+/).slice(0, 2).join(' '))
+            .filter(Boolean),
+        ),
+      );
+      const anchorChunk = grp.chunks.find((c) => c.isAnchor) || grp.chunks[0];
+      const groupNum = grp.chunks[0]?.groupNumber || parseInt(grp.id.split('::group-')[1], 10) || 1;
+
       list.push({
         ...grp,
+        number: groupNum,
         total,
         masteredCount,
         learningCount,
@@ -596,6 +714,10 @@ class Store {
         firstUnfinished,
         variationDone: varDone,
         variationCount: varCount,
+        uniqueTemplatesCount: uniqueTemplates.length,
+        templates: uniqueTemplates,
+        anchorChunk,
+        isCapstone: Boolean(grp.chunks[0]?.isCapstone),
       });
     }
     return list;
@@ -658,6 +780,7 @@ class Store {
     rec.understand.done = true;
     rec.understand.at = nowIso();
     rec.lastAt = nowIso();
+    this.ensureSrSchedule(id, rec.understand.at);
     this.touch();
   }
 
@@ -726,6 +849,7 @@ class Store {
     if (!this.masteryReady(id)) return false;
     rec.mastery = { done: true, at: nowIso() };
     rec.review = { due: addDays(new Date(), 3).toISOString(), interval: 3, reps: 1, lastGrade: 'good', lastAt: nowIso() };
+    this.ensureSrSchedule(id, rec.mastery.at);
     this.touch();
     return true;
   }
@@ -746,6 +870,172 @@ class Store {
     this.state.reviews = this.state.reviews.slice(0, 400);
     this.day().reviews += 1;
     this.touch();
+  }
+
+  ensureSrSchedule(id, baseDate = null) {
+    const rec = this.record(id);
+    if (!rec.srSchedule) {
+      delete rec.srOptOut;
+      const base = baseDate || rec.produce?.log?.[0]?.at || rec.lastAt || nowIso();
+      rec.srSchedule = createInitialSrSchedule(base);
+      this.touch();
+    }
+    return rec.srSchedule;
+  }
+
+  enrollSrSchedule(id) {
+    const rec = this.record(id);
+    delete rec.srOptOut;
+    rec.srSchedule = createInitialSrSchedule(nowIso());
+    this._dueCache = null;
+    this.touch();
+    return rec.srSchedule;
+  }
+
+  cancelSrSchedule(id) {
+    const rec = this.record(id);
+    rec.srSchedule = null;
+    rec.srOptOut = true;
+    this._dueCache = null;
+    this.touch();
+    return true;
+  }
+
+  getSrCardInfo(id) {
+    const rec = this.peek(id);
+    const sch = rec?.srSchedule;
+    if (!sch || rec?.srOptOut) return { enrolled: false };
+    const now = Date.now();
+    const nextDueMs = sch.nextReviewAt ? new Date(sch.nextReviewAt).getTime() : null;
+    const isDue = nextDueMs !== null && now >= nextDueMs;
+    const isCompleted = sch.currentStage >= 5;
+    const stageInfo = SR_INTERVALS.find((i) => i.stage === sch.currentStage) || {
+      stage: 5,
+      label: 'مكتملة بالكامل',
+      shortLabel: 'مكتملة',
+      sub: 'تمت جميع المراجعات الأربع',
+    };
+    return {
+      enrolled: true,
+      isDue,
+      isCompleted,
+      currentStage: sch.currentStage,
+      stageInfo,
+      countdown: formatCountdown(sch.nextReviewAt).text,
+      nextReviewAt: sch.nextReviewAt,
+    };
+  }
+
+  completeSrStage(id, grade = 'good') {
+    const rec = this.record(id);
+    const sch = this.ensureSrSchedule(id);
+    const now = nowIso();
+    const stageIndex = sch.stages.findIndex((s) => s.stage === sch.currentStage && !s.done);
+
+    if (grade === 'again') {
+      if (stageIndex >= 0) {
+        // Reset scheduled time for this stage to now + 4 hours
+        const retryAt = addHours(new Date(), 4).toISOString();
+        sch.stages[stageIndex].scheduledAt = retryAt;
+        sch.nextReviewAt = retryAt;
+        sch.notifiedStage = Math.max(0, sch.currentStage - 1);
+      }
+      sch.lastReviewedAt = now;
+    } else {
+      // 'good' or 'hard'
+      if (stageIndex >= 0) {
+        sch.stages[stageIndex].done = true;
+        sch.stages[stageIndex].completedAt = now;
+        sch.lastReviewedAt = now;
+        const nextUndone = sch.stages.find((s) => !s.done);
+        if (nextUndone) {
+          sch.currentStage = nextUndone.stage;
+          const intervalHours = grade === 'hard' ? Math.round(nextUndone.hours * 0.7) : nextUndone.hours;
+          const minScheduled = addHours(new Date(), intervalHours).toISOString();
+          if (new Date(nextUndone.scheduledAt) < new Date(minScheduled)) {
+            nextUndone.scheduledAt = minScheduled;
+          }
+          sch.nextReviewAt = nextUndone.scheduledAt;
+
+          // Cascade forward to subsequent stages
+          let cascadeRef = new Date(nextUndone.scheduledAt);
+          for (let i = stageIndex + 1; i < sch.stages.length; i++) {
+            const s = sch.stages[i];
+            if (!s.done && s.stage > nextUndone.stage) {
+              const minNext = addHours(cascadeRef, s.hours).toISOString();
+              if (new Date(s.scheduledAt) < new Date(minNext)) {
+                s.scheduledAt = minNext;
+              }
+              cascadeRef = new Date(s.scheduledAt);
+            }
+          }
+        } else {
+          sch.currentStage = 5;
+          sch.nextReviewAt = null;
+          sch.notifiedStage = 5;
+        }
+      }
+    }
+
+    this.gradeReview(id, grade);
+    this.touch();
+    return sch;
+  }
+
+  getScheduleRows() {
+    const rows = [];
+    const now = Date.now();
+    for (const [id, rec] of Object.entries(this.state.chunks)) {
+      if (!rec) continue;
+      const chunk = this.chunk(id);
+      if (!chunk) continue;
+      const hasActivity = (rec.produce?.total || 0) > 0 || rec.mastery?.done || rec.understand?.done || rec.srSchedule;
+      if (!hasActivity) continue;
+
+      const sch = rec.srSchedule || this.ensureSrSchedule(id);
+      if (!sch) continue;
+
+      const nextDueMs = sch.nextReviewAt ? new Date(sch.nextReviewAt).getTime() : null;
+      const isDue = nextDueMs !== null && now >= nextDueMs;
+      const countdown = formatCountdown(sch.nextReviewAt);
+      const stageInfo = SR_INTERVALS.find((i) => i.stage === sch.currentStage) || {
+        stage: 5,
+        label: 'مكتملة بالكامل',
+        shortLabel: 'مكتملة',
+        sub: 'تمت جميع المراجعات الأربع',
+      };
+
+      rows.push({
+        id,
+        chunk,
+        record: rec,
+        schedule: sch,
+        currentStage: sch.currentStage,
+        stageInfo,
+        nextReviewAt: sch.nextReviewAt,
+        formattedNextDate: sch.nextReviewAt ? formatExactDateTime(sch.nextReviewAt) : 'أتمت كل المراجعات ✅',
+        isDue,
+        countdown,
+        stages: sch.stages.map((s) => ({
+          ...s,
+          formattedScheduled: formatExactDateTime(s.scheduledAt),
+          formattedCompleted: s.completedAt ? formatExactDateTime(s.completedAt) : null,
+        })),
+      });
+    }
+
+    rows.sort((a, b) => {
+      if (a.isDue && !b.isDue) return -1;
+      if (!a.isDue && b.isDue) return 1;
+      if (a.nextReviewAt && !b.nextReviewAt) return -1;
+      if (!a.nextReviewAt && b.nextReviewAt) return 1;
+      if (a.nextReviewAt && b.nextReviewAt) {
+        return new Date(a.nextReviewAt) - new Date(b.nextReviewAt);
+      }
+      return 0;
+    });
+
+    return rows;
   }
 
   // ---------- navigation ----------
@@ -793,13 +1083,24 @@ class Store {
   }
 
   dueItems() {
-    if (this._dueCache && this._dueDay === dayKey()) return this._dueCache;
+    if (this._dueCache && this._dueCacheAt && Date.now() - this._dueCacheAt < 15000) return this._dueCache;
     const out = [];
     const now = new Date();
     for (const level of this.levels) {
       for (const chunk of level.chunks) {
         const rec = this.peek(chunk.id);
         if (!rec) continue;
+        if (rec.srSchedule?.nextReviewAt && new Date(rec.srSchedule.nextReviewAt) <= now) {
+          out.push({
+            id: chunk.id,
+            levelId: level.id,
+            type: 'review',
+            due: rec.srSchedule.nextReviewAt,
+            interval: rec.review?.interval || 1,
+            srStage: rec.srSchedule.currentStage,
+          });
+          continue;
+        }
         if (rec.mastery?.done) {
           if (rec.review?.due && dayStart(new Date(rec.review.due)) <= dayStart(now)) {
             out.push({ id: chunk.id, levelId: level.id, type: 'review', due: rec.review.due, interval: rec.review.interval });
@@ -822,6 +1123,7 @@ class Store {
     const weight = { review: 0, delayed: 1, produce: 2 };
     out.sort((a, b) => weight[a.type] - weight[b.type] || new Date(a.due) - new Date(b.due));
     this._dueCache = out;
+    this._dueCacheAt = Date.now();
     this._dueDay = dayKey();
     return out;
   }

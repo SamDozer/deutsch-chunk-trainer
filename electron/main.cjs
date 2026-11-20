@@ -3,7 +3,8 @@ const path = require('node:path');
 const fsp = require('node:fs/promises');
 const fs = require('node:fs');
 const os = require('node:os');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
+const http = require('node:http');
 const { spawn } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..');
@@ -102,7 +103,16 @@ let lastBackupAt = 0;
 let writeChain = Promise.resolve();
 let transcriptionJob = null;
 
-function runHidden(executable, args, job, timeoutMs) {
+function killProcessTree(child) {
+  if (!child || !child.pid) return;
+  if (process.platform === 'win32') {
+    try { spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }); } catch {}
+  } else {
+    try { child.kill('SIGKILL'); } catch {}
+  }
+}
+
+function runHidden(executable, args, job, timeoutMs, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     let errorText = '';
     let timedOut = false;
@@ -110,6 +120,7 @@ function runHidden(executable, args, job, timeoutMs) {
       cwd: path.dirname(executable),
       windowsHide: true,
       stdio: ['ignore', 'ignore', 'pipe'],
+      env: { ...process.env, ...extraEnv },
     });
     job.child = child;
     child.stderr.on('data', (part) => {
@@ -117,7 +128,7 @@ function runHidden(executable, args, job, timeoutMs) {
     });
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      killProcessTree(child);
     }, timeoutMs);
     child.once('error', (error) => {
       clearTimeout(timer);
@@ -414,6 +425,15 @@ function registerIpc() {
     await fsp.mkdir(USER_DIR, { recursive: true });
     await shell.openPath(USER_DIR);
     return { ok: true };
+  });
+
+  ipcMain.handle('app:focus', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+    return true;
   });
 
   ipcMain.handle('app:info', async () => ({

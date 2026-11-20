@@ -69,12 +69,14 @@ function rowMarkup(chunk, currentId) {
   const statusLabel = phase.label;
   const statusClass = status === 'mastered' ? 'is-done' : done > 0 ? 'is-prog' : '';
   const step = store.currentStep(chunk.id);
+  const pattern = chunk.template || chunk.patternKey || (chunk.family ? chunk.family.split(':')[1] : null);
   return html`
     <button class="chunk-row ${chunk.id === currentId ? 'is-current' : ''}" data-href="#/practice/${chunk.id}?step=${step}" data-id="${chunk.id}">
       <span class="chunk-id">${chunk.id}</span>
       <span class="chunk-main">
         <span class="de chunk-de">${chunk.de}</span>
         <span class="chunk-ar">${chunk.ar}</span>
+        ${pattern ? html`<span class="chip chip-blue de" style="font-size:11px;margin-top:4px;align-self:flex-start;opacity:0.9">قالب: ${pattern}</span>` : ''}
       </span>
       <span class="stage-dots" aria-label="${done} من 4 خطوات">
         ${sentenceFlags.map((flag, index) =>
@@ -95,7 +97,7 @@ function groupCardMarkup(group, currentId, isExpanded, hasQuery, dueSet, ui) {
       ? html`<span class="chip chip-blue" style="font-size:11px">5 تنويعات جاهزة ✓</span>`
       : group.learningCount > 0
         ? html`<span class="chip chip-yellow" style="font-size:11px">قيد التدريب</span>`
-        : html`<span class="chip" style="font-size:11px">قالب جديد</span>`;
+        : html`<span class="chip" style="font-size:11px">مجموعة جديدة</span>`;
 
   // Filter chunks if query/filter is active
   const displayChunks = hasQuery || ui.filter !== 'all'
@@ -108,17 +110,27 @@ function groupCardMarkup(group, currentId, isExpanded, hasQuery, dueSet, ui) {
     <div class="group-card ${group.isMastered ? 'is-mastered' : ''}" data-group-id="${group.id}">
       <div class="group-card-header" data-toggle-group="${group.id}">
         <div class="group-card-info">
-          <div class="group-title-row">
+          <div class="group-title-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">
             <span class="group-icon">${icon('folder')}</span>
-            <span class="group-title de">${group.title}</span>
+            <span class="group-title">${group.title}</span>
+            <span class="chip chip-blue" style="font-size:11px">${group.uniqueTemplatesCount || 8} قوالب مختلفة</span>
+            ${group.isCapstone ? html`<span class="chip chip-purple" style="font-size:11px">المجموعة الختامية للمستوى 🌟 (${group.total} جمل)</span>` : ''}
             ${statusTag}
           </div>
-          <div class="group-meta-row">
+          <div class="group-meta-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
             <span class="sub muted">${group.masteredCount} من ${group.total} جمل متقنة</span>
             <span class="dot-sep"></span>
             <div class="group-meter-wrap">
               <div class="meter ticks" style="width:80px;height:6px"><span style="width:${group.pct}%;background:var(--lv)"></span></div>
               <span class="group-pct">${group.pct}%</span>
+            </div>
+            <span class="dot-sep"></span>
+            <div class="group-pips" style="display:inline-flex;gap:4px;align-items:center" title="حالة جمل المجموعة">
+              ${group.chunks.map((c) => {
+                const st = store.status(c.id);
+                const bg = st === 'mastered' ? 'var(--green)' : st === 'learning' ? 'var(--yellow)' : 'var(--line)';
+                return html`<i style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${bg}" title="${c.id}: ${c.de}"></i>`;
+              })}
             </div>
           </div>
         </div>
@@ -249,8 +261,8 @@ export const levelScreen = {
           <div class="level-hero-main">
             <div class="level-big">${level.id}</div>
             <div>
-              <h2>${chunksLabel(level.count)} مقسمة إلى ${groups.length} مجموعة قوالب</h2>
-              <p>اختر مجموعة وتدرب على جملها بالتتابع خطوة بخطوة. شروط التنويع تطبق مرة واحدة لكل مجموعة.</p>
+              <h2>${chunksLabel(level.count)} مقسمة إلى ${groups.length} مجموعة منوعة</h2>
+              <p>مجموعات منوعة تدمج قوالب وتراكيب مختلفة لتجنب التكرار الرتيب، مع مرحلة ختامية من 5 تنويعات لكل مجموعة.</p>
             </div>
           </div>
           <div class="level-hero-side">
@@ -276,8 +288,8 @@ export const levelScreen = {
 
           <!-- View Mode Toggle: Groups vs All Chunks -->
           <div class="view-mode-toggle" id="view-mode-toggle">
-            <button class="view-toggle-btn ${ui.viewMode === 'groups' ? 'is-active' : ''}" data-view="groups" title="عرض مجموعات القوالب">
-              ${icon('folder')} مجموعات القوالب (${groups.length})
+            <button class="view-toggle-btn ${ui.viewMode === 'groups' ? 'is-active' : ''}" data-view="groups" title="عرض المجموعات المنوعة">
+              ${icon('folder')} المجموعات المنوعة (${groups.length})
             </button>
             <button class="view-toggle-btn ${ui.viewMode === 'all' ? 'is-active' : ''}" data-view="all" title="عرض كل الجمل مسطحة">
               ${icon('list')} كل الجمل (${level.count})
@@ -286,7 +298,7 @@ export const levelScreen = {
 
           <label class="search-field">
             ${icon('search')}
-            <input id="chunk-search" type="search" placeholder="دوّر بالقالب أو بالألماني أو بالعربي" value="${ui.query}" />
+            <input id="chunk-search" type="search" placeholder="دوّر برقم المجموعة أو بالقالب أو بالألماني أو بالعربي" value="${ui.query}" />
           </label>
         </div>
 
@@ -295,7 +307,7 @@ export const levelScreen = {
           <div class="pager" id="pager">
             ${payload.total > payload.shown
               ? html`<button class="btn btn-ghost btn-sm" data-more>عرض المزيد (${payload.total - payload.shown} فاضل)</button>`
-              : html`<span>${payload.total} ${payload.isGroups ? 'مجموعة قوالب' : 'جملة'} تحت الفلتر ده</span>`}
+              : html`<span>${payload.total} ${payload.isGroups ? 'مجموعة منوعة' : 'جملة'} تحت الفلتر ده</span>`}
           </div>
         </div>
 
@@ -305,7 +317,7 @@ export const levelScreen = {
               (stage, index) => html`<span class="method-step"><span class="method-num">${index + 1}</span>${stage.short}</span>`,
             )}
           </div>
-          <span class="sub muted">كل مجموعة بتتدرب على جملها بالتتابع، وبتنتج الـ 5 تنويعات مرة واحدة للقالب ككل!</span>
+          <span class="sub muted">كل مجموعة بتتدرب على جملها المنوعة بالتتابع، وتنتج 5 تنويعات للمجموعة في المرحلة الختامية!</span>
         </div>
       </div>
     `;

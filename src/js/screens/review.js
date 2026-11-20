@@ -15,9 +15,32 @@ const TYPE_HINT = {
   delayed: 'بعد أسبوع — قولها من دماغك من غير مراجعة.',
 };
 
+function getReviewQueue(targetChunkId = null) {
+  const queue = [...store.dueItems()];
+  if (targetChunkId) {
+    const existingIndex = queue.findIndex((item) => item.id === targetChunkId);
+    if (existingIndex > 0) {
+      const [item] = queue.splice(existingIndex, 1);
+      queue.unshift(item);
+    } else if (existingIndex === -1) {
+      const chunk = store.chunk(targetChunkId);
+      if (chunk) {
+        queue.unshift({
+          id: targetChunkId,
+          levelId: chunk.level,
+          type: 'review',
+          due: new Date().toISOString(),
+          srStage: store.peek(targetChunkId)?.srSchedule?.currentStage || 1,
+        });
+      }
+    }
+  }
+  return queue;
+}
+
 export const reviewScreen = {
-  render() {
-    const queue = store.dueItems();
+  render(context) {
+    const queue = getReviewQueue(context?.query?.get('chunkId'));
     const stats = store.overall();
     const counts = queue.reduce(
       (acc, item) => {
@@ -57,8 +80,8 @@ export const reviewScreen = {
     `;
   },
 
-  mount(root) {
-    const queue = store.dueItems();
+  mount(root, context) {
+    const queue = getReviewQueue(context?.query?.get('chunkId'));
     if (!queue.length) return null;
 
     const main = root.querySelector('#review-main');
@@ -160,7 +183,7 @@ export const reviewScreen = {
       else audioEngine.playTap();
 
       if (item.type === 'review') {
-        store.gradeReview(item.id, grade);
+        store.completeSrStage(item.id, grade);
         results.push(grade);
         toast(grade === 'good' ? 'تمام — الفاصل هيكبر' : grade === 'hard' ? 'خدت وقت — هترجع أقرب' : 'هترجع بكرة', 'check');
       } else if (item.type === 'delayed') {

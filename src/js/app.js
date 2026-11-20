@@ -10,8 +10,10 @@ import { statsScreen } from './screens/stats.js';
 import { settingsScreen } from './screens/settings.js';
 import { methodScreen } from './screens/method.js';
 import { trophiesScreen } from './screens/trophies.js';
+import { chillScreen } from './screens/chill.js';
 import { audioEngine } from './audioEngine.js';
 import { trophyManager } from './trophies.js';
+import { reviewScheduler } from './scheduler.js';
 
 const routes = [
   { name: 'home', pattern: /^\/?$/, screen: homeScreen },
@@ -23,6 +25,7 @@ const routes = [
   { name: 'trophies', pattern: /^\/trophies$/, screen: trophiesScreen },
   { name: 'settings', pattern: /^\/settings$/, screen: settingsScreen },
   { name: 'method', pattern: /^\/method$/, screen: methodScreen },
+  { name: 'chill', pattern: /^\/chill$/, screen: chillScreen },
 ];
 
 const view = document.getElementById('view');
@@ -86,11 +89,17 @@ function updateChrome(name) {
 }
 
 function route() {
-  const match = resolve();
   try {
+    if (typeof cleanup === 'function') {
+      try {
+        cleanup();
+      } catch (err) {
+        console.warn('Error during screen cleanup:', err);
+      }
+      cleanup = null;
+    }
     closeAllModals();
-    cleanup?.();
-    cleanup = null;
+    const match = resolve();
     const context = {
       params: match.params,
       query: match.query,
@@ -129,6 +138,7 @@ async function boot() {
   try {
     await store.init();
     document.documentElement.dataset.theme = store.state.settings.theme === 'dark' ? 'dark' : 'light';
+    reviewScheduler.init();
   } catch (error) {
     console.error(error);
     view.innerHTML = String(html`
@@ -157,6 +167,8 @@ async function boot() {
     if (!target) return;
     if (target.id === 'sound-btn') return; // Handled separately
     if (target.dataset.noSound) return;
+    // Skip elements that play their own dedicated action sounds, TTS, or drills
+    if (target.closest('[data-no-sound], [data-grade], [data-produce], [data-voice], [data-act^="test-"], [data-act="speak"], [data-act="slow"], [data-act="natural"], [data-act="record"], [data-batch-log], [data-act="say"], [data-act="blind"], [data-act="batch:log"], [data-act="batch:extra"], [data-act="vary:save"], [data-act="vary:del"], [data-act="speak:pass"], [data-act="test-notification-chime"], [data-plus], [data-reveal], [data-answer]')) return;
     if (target.classList.contains('switch')) {
       const isNowOn = !target.classList.contains('is-on');
       audioEngine.playToggle(isNowOn);

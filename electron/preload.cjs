@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('chunkAPI', {
   importState: () => ipcRenderer.invoke('state:import'),
   resetState: () => ipcRenderer.invoke('state:reset'),
   openDataFolder: () => ipcRenderer.invoke('shell:open-data-folder'),
+  focusWindow: () => ipcRenderer.invoke('app:focus'),
   appInfo: () => ipcRenderer.invoke('app:info'),
   transcribeGermanAudio: (audio) => ipcRenderer.invoke('whisper:transcribe', audio),
   cancelTranscription: () => ipcRenderer.invoke('whisper:cancel'),

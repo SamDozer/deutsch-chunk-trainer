@@ -8,6 +8,9 @@ class AudioEngine {
     this.soundEnabled = true;
     this.masterVolume = 0.8;
     this.unlocked = false;
+    this.unlockPromise = null;
+    this._lastChimeAt = 0;
+    this._lastActionSoundAt = 0;
     this.listeners = new Set();
 
     // Internal components
@@ -54,66 +57,71 @@ class AudioEngine {
 
   async unlock() {
     if (this.unlocked) return;
+    if (this.unlockPromise) return this.unlockPromise;
 
-    try {
-      // 1. Initialize Web Audio Context fallback if needed
-      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtxClass && !this.webAudioCtx) {
-        this.webAudioCtx = new AudioCtxClass();
-        if (this.webAudioCtx.state === 'suspended') {
-          await this.webAudioCtx.resume();
+    this.unlockPromise = (async () => {
+      try {
+        // 1. Initialize Tone.js first (creates master AudioContext without duplicates)
+        if (typeof window !== 'undefined' && window.Tone) {
+          this.tone = window.Tone;
+          if (this.tone.context.state !== 'running') {
+            await this.tone.start();
+          }
+
+          // Master Limiter(-2) & Subtle Reverb to avoid clipping
+          this.limiter = new this.tone.Limiter(-2).toDestination();
+          this.reverb = new this.tone.Reverb({ decay: 1.2, preDelay: 0.01, wet: 0.18 }).connect(this.limiter);
+          await this.reverb.generate();
+
+          // Warm Marimba-style PolySynth
+          this.marimba = new this.tone.PolySynth(this.tone.Synth, {
+            oscillator: { type: 'triangle' },
+            envelope: {
+              attack: 0.002,
+              decay: 0.32,
+              sustain: 0.02,
+              release: 0.28,
+            },
+            volume: -3,
+          }).connect(this.reverb);
+
+          this.applyVolumeToTone();
+        } else if (typeof window !== 'undefined') {
+          // Fallback only if Tone.js is unavailable
+          const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtxClass && !this.webAudioCtx) {
+            this.webAudioCtx = new AudioCtxClass();
+            if (this.webAudioCtx.state === 'suspended') {
+              await this.webAudioCtx.resume();
+            }
+          }
         }
-      }
 
-      // 2. Initialize Tone.js
-      if (window.Tone) {
-        this.tone = window.Tone;
-        if (this.tone.context.state !== 'running') {
-          await this.tone.start();
-        }
-
-        // Master Limiter(-2) & Subtle Reverb to avoid clipping
-        this.limiter = new this.tone.Limiter(-2).toDestination();
-        this.reverb = new this.tone.Reverb({ decay: 1.2, preDelay: 0.01, wet: 0.18 }).connect(this.limiter);
-        await this.reverb.generate();
-
-        // Warm Marimba-style PolySynth
-        this.marimba = new this.tone.PolySynth(this.tone.Synth, {
-          oscillator: { type: 'triangle' },
-          envelope: {
-            attack: 0.002,
-            decay: 0.32,
-            sustain: 0.02,
-            release: 0.28,
-          },
-          volume: -3,
-        }).connect(this.reverb);
-
-        this.applyVolumeToTone();
-      }
-
-      // 3. Initialize snd-lib with local audio sprite
-      if (window.Snd) {
-        if (window.Snd.KIT_INFO && window.Snd.KIT_INFO['01']) {
-          window.Snd.KIT_INFO['01'].audioSrc = new URL('../assets/sounds/01/audioSprite.mp3', import.meta.url).href;
-        }
-        this.snd = new window.Snd({
-          kit: window.Snd.KITS?.SND01 || '01',
-        });
-        if (typeof this.snd.load === 'function' && window.Snd.KITS?.SND01) {
-          await this.snd.load(window.Snd.KITS.SND01).catch((err) => {
-            console.warn('Local snd-lib load notice:', err);
+        // 2. Initialize snd-lib with local audio sprite
+        if (typeof window !== 'undefined' && window.Snd) {
+          if (window.Snd.KIT_INFO && window.Snd.KIT_INFO['01']) {
+            window.Snd.KIT_INFO['01'].audioSrc = new URL('../assets/sounds/01/audioSprite.mp3', import.meta.url).href;
+          }
+          this.snd = new window.Snd({
+            kit: window.Snd.KITS?.SND01 || '01',
           });
+          if (typeof this.snd.load === 'function' && window.Snd.KITS?.SND01) {
+            await this.snd.load(window.Snd.KITS.SND01).catch((err) => {
+              console.warn('Local snd-lib load notice:', err);
+            });
+          }
+          if (this.snd) {
+            this.snd._masterVolume = this.soundEnabled ? this.masterVolume : 0;
+          }
         }
-        if (this.snd) {
-          this.snd._masterVolume = this.soundEnabled ? this.masterVolume : 0;
-        }
-      }
 
-      this.unlocked = true;
-    } catch (err) {
-      console.warn('AudioEngine unlock delayed:', err);
-    }
+        this.unlocked = true;
+      } catch (err) {
+        console.warn('AudioEngine unlock delayed:', err);
+      }
+    })();
+
+    return this.unlockPromise;
   }
 
   applyVolumeToTone() {
@@ -204,11 +212,60 @@ class AudioEngine {
     if (this.tone && this.tone.context?.rawContext) {
       return this.tone.context.rawContext;
     }
-    if (!this.webAudioCtx) {
+    if (!this.webAudioCtx && typeof window !== 'undefined') {
       const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
       if (AudioCtxClass) this.webAudioCtx = new AudioCtxClass();
     }
     return this.webAudioCtx;
+  }
+
+  // Gentle, non-intrusive two-tone audio alarm ("تيت تيت") for scheduled reviews
+  async playReviewChime(force = false) {
+    if (!this.soundEnabled && !force) return;
+    const nowMs = Date.now();
+    if (nowMs - this._lastChimeAt < 700) return;
+    this._lastChimeAt = nowMs;
+    this._lastActionSoundAt = nowMs;
+    await this.unlock();
+
+    const ctx = this.getNativeAudioCtx();
+    if (!ctx) return;
+    try {
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => {});
+      }
+      const now = ctx.currentTime;
+      const baseGain = 0.08 * (this.masterVolume || 0.8);
+
+      // Tone 1: ~880 Hz (A5), duration ~110ms
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      gain1.gain.setValueAtTime(0.0001, now);
+      gain1.gain.linearRampToValueAtTime(baseGain, now + 0.012);
+      gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.115);
+
+      // 70ms gap -> Tone 2 starts at now + 0.11 + 0.07 = now + 0.18s
+      const tone2Start = now + 0.18;
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(987.77, tone2Start); // ~987 Hz (B5)
+      gain2.gain.setValueAtTime(0.0001, tone2Start);
+      gain2.gain.linearRampToValueAtTime(baseGain, tone2Start + 0.012);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, tone2Start + 0.11);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(tone2Start);
+      osc2.stop(tone2Start + 0.115);
+    } catch (err) {
+      console.warn('Review chime synthesis error:', err);
+    }
   }
 
   // ============================================================
@@ -218,6 +275,7 @@ class AudioEngine {
   // Clean subtle tap for buttons and navigation
   playTap() {
     if (!this.soundEnabled) return;
+    if (Date.now() - this._lastActionSoundAt < 80) return;
     this.unlock();
 
     if (this.snd && window.Snd?.SOUNDS?.TAP) {
@@ -249,6 +307,7 @@ class AudioEngine {
   // Crisp switch feedback
   playToggle(isOn = true) {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     if (this.snd && window.Snd?.SOUNDS) {
@@ -285,6 +344,7 @@ class AudioEngine {
   // Ultra-short, soft percussive pop (15ms): 'up' = 580Hz, 'down' = 420Hz
   playStepper(direction = 'up') {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     const freq = direction === 'down' ? 420 : 580;
@@ -309,6 +369,7 @@ class AudioEngine {
   // Low, muted wooden thud (150Hz -> 90Hz filtered triangle wave)
   playSoftError() {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     const ctx = this.getNativeAudioCtx();
@@ -346,6 +407,7 @@ class AudioEngine {
   // Subtle wooden/glass tick during the final 3 seconds (3, 2, 1)
   playCountdownTick(secondsLeft = 3) {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     const ctx = this.getNativeAudioCtx();
@@ -375,6 +437,7 @@ class AudioEngine {
   // Energetic, crisp double-chime (SND.SOUNDS.NOTIFICATION + G5 -> C6 marimba accent)
   playRestComplete() {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     if (this.snd && window.Snd?.SOUNDS?.NOTIFICATION) {
@@ -418,6 +481,7 @@ class AudioEngine {
   // Warm marimba-like PolySynth note ascending major pentatonic scale (C5, D5, E5, G5, A5, C6)
   playSetComplete(setIndex = 0) {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     const scale = ['C5', 'D5', 'E5', 'G5', 'A5', 'C6'];
@@ -463,6 +527,7 @@ class AudioEngine {
   // Clean 2-note harmonic confirmation (E5 + B5)
   playExerciseComplete() {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     if (this.marimba && this.tone) {
@@ -499,6 +564,7 @@ class AudioEngine {
   // Rich, uplifting 4-note ascending marimba arpeggio (C5 -> E5 -> G5 -> C6) with warm decay
   playWorkoutComplete() {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     const notes = ['C5', 'E5', 'G5', 'C6'];
@@ -543,6 +609,7 @@ class AudioEngine {
   // Triumphant, sparkling chord flourish (F5 -> A5 -> C6 -> E6 -> G6 rapid shimmer)
   playNewPR() {
     if (!this.soundEnabled) return;
+    this._lastActionSoundAt = Date.now();
     this.unlock();
 
     // snd celebration sound if available

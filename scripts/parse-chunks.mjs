@@ -87,8 +87,13 @@ for (const level of LEVELS) {
   }
 
   total += chunks.length;
-  levels.push({ id: level.id, title: level.title, count: chunks.length, chunks });
-  console.log(`${level.id}: ${chunks.length} chunks`);
+  // Apply diverse interleaving and capstones
+  const { buildLevelGroups } = await import('./build-interleaved-groups.mjs');
+  const diverseGroups = buildLevelGroups(chunks, level.id, 8);
+  const flatInterleaved = diverseGroups.flatMap((g) => g.chunks);
+
+  levels.push({ id: level.id, title: level.title, count: flatInterleaved.length, chunks: flatInterleaved });
+  console.log(`${level.id}: ${flatInterleaved.length} chunks across ${diverseGroups.length} diverse groups`);
 }
 
 const payload = {

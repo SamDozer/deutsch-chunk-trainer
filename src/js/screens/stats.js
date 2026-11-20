@@ -1,6 +1,24 @@
 import { store } from '../store.js';
-import { html, icon, dayKey, dayStart, addDays, dateLabel, relativeWhen, timeLabel } from '../utils.js';
+import { html, icon, dayKey, dayStart, addDays, dateLabel, relativeWhen, timeLabel, formatExactDateTime, formatCountdown, pad, daysBetween } from '../utils.js';
 import { toast } from '../ui.js';
+
+let srTableFilter = 'active';
+let srTableShowAll = false;
+
+function shortTimeOrDate(isoDate) {
+  if (!isoDate) return '—';
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return '—';
+  const diffDays = daysBetween(new Date(), d);
+  if (diffDays === 0) {
+    let h = d.getHours();
+    const m = pad(d.getMinutes());
+    const period = h >= 12 ? 'م' : 'ص';
+    h = h % 12 || 12;
+    return `${h}:${m} ${period}`;
+  }
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+}
 
 function weekStart(date) {
   const start = dayStart(date);
@@ -85,6 +103,179 @@ function activityLabel(status) {
   return 'لسه جديدة';
 }
 
+function renderScheduleRow(row) {
+  const { chunk, isDue, countdown, formattedNextDate, currentStage, stageInfo, stages } = row;
+  const isMastered = currentStage >= 5;
+
+  return html`
+    <tr class="sr-row ${isDue ? 'is-due' : ''}" data-chunk-id="${chunk.id}">
+      <td class="sr-col-chunk">
+        <div class="sr-de" dir="ltr" title="${chunk.de}"><b>${chunk.de}</b></div>
+        <div class="sr-ar sub muted" title="${chunk.ar}">${chunk.ar}</div>
+      </td>
+      <td class="sr-col-next">
+        <div class="sr-next-stack">
+          <div class="row" style="gap:4px;align-items:center">
+            <span class="sr-stage-badge ${isMastered ? 'is-complete' : isDue ? 'is-due' : ''}">
+              ${stageInfo.label}
+            </span>
+          </div>
+          <div class="sr-countdown-wrap">
+            ${isDue
+              ? html`<span class="chip chip-amber sr-chip-pulse">مستحق الآن</span>`
+              : isMastered
+                ? html`<span class="chip chip-green">أتمت بنجاح ✅</span>`
+                : html`<span class="countdown-text sub muted">${countdown.text}</span>`}
+          </div>
+          ${!isMastered && formattedNextDate
+            ? html`<div class="sr-next-time sub muted">${formattedNextDate}</div>`
+            : ''}
+        </div>
+      </td>
+      <td class="sr-col-plan">
+        <div class="sr-pill-stepper">
+          ${stages.map((st) => {
+            const isCurrent = st.stage === currentStage;
+            const cls = st.done
+              ? 'is-done'
+              : isCurrent
+                ? isDue
+                  ? 'is-current-due'
+                  : 'is-current'
+                : 'is-pending';
+            const label = st.done ? '✓' : shortTimeOrDate(st.scheduledAt);
+            const tooltip = `${st.label}: ${st.done ? (st.formattedCompleted ? 'تمت: ' + st.formattedCompleted : 'تمت بنجاح') : 'الموعد: ' + st.formattedScheduled}`;
+            return html`
+              <div class="sr-pill ${cls}" title="${tooltip}">
+                <span class="sr-pill-num">${st.stage}</span>
+                <span class="sr-pill-lbl">${label}</span>
+              </div>
+            `;
+          })}
+        </div>
+      </td>
+      <td class="sr-col-action">
+        ${isDue
+          ? html`
+              <a class="btn btn-primary btn-xs sr-action-btn" href="#/review?chunkId=${encodeURIComponent(chunk.id)}">
+                ${icon('play')} راجع
+              </a>
+            `
+          : isMastered
+            ? html`<span class="chip chip-green sr-action-done">مكتمل</span>`
+            : html`
+              <a class="btn btn-ghost btn-xs sr-action-btn" href="#/review?chunkId=${encodeURIComponent(chunk.id)}">
+                درّب
+              </a>
+            `}
+      </td>
+    </tr>
+  `;
+}
+
+function renderScheduleTableInner() {
+  const allRows = store.getScheduleRows();
+  if (!allRows.length) {
+    return html`
+      <div class="sr-empty-box">
+        <p class="sub muted">لسه مفيش جمل نشطة في جدول المراجعات. ابدأ تدريب أي جملة وهيتم جدولة مواعيد المراجعات الأربعة فوراً.</p>
+      </div>
+    `;
+  }
+
+  const activeRows = allRows.filter((r) => r.currentStage < 5);
+  const dueRows = allRows.filter((r) => r.isDue);
+  const doneRows = allRows.filter((r) => r.currentStage >= 5);
+
+  let displayed = allRows;
+  if (srTableFilter === 'active') displayed = activeRows;
+  else if (srTableFilter === 'due') displayed = dueRows;
+  else if (srTableFilter === 'done') displayed = doneRows;
+
+  const totalFiltered = displayed.length;
+  const hasLimit = !srTableShowAll && totalFiltered > 8;
+  const visibleRows = hasLimit ? displayed.slice(0, 8) : displayed;
+
+  return html`
+    <div class="sr-filter-bar">
+      <button class="sr-filter-btn ${srTableFilter === 'active' ? 'is-active' : ''}" data-sr-filter="active">
+        النشطة <span class="sr-filter-count">${activeRows.length}</span>
+      </button>
+      <button class="sr-filter-btn ${srTableFilter === 'due' ? 'is-active' : ''}" data-sr-filter="due">
+        المستحقة <span class="sr-filter-count ${dueRows.length > 0 ? 'text-amber' : ''}">${dueRows.length}</span>
+      </button>
+      <button class="sr-filter-btn ${srTableFilter === 'done' ? 'is-active' : ''}" data-sr-filter="done">
+        المكتملة <span class="sr-filter-count">${doneRows.length}</span>
+      </button>
+      <button class="sr-filter-btn ${srTableFilter === 'all' ? 'is-active' : ''}" data-sr-filter="all">
+        الكل <span class="sr-filter-count">${allRows.length}</span>
+      </button>
+    </div>
+
+    ${visibleRows.length === 0
+      ? html`<div class="sr-empty-box"><p class="sub muted">لا توجد جمل في هذا التصنيف حالياً.</p></div>`
+      : html`
+        <div class="schedule-table-wrap">
+          <table class="schedule-live-table">
+            <colgroup>
+              <col style="width: 38%;">
+              <col style="width: 24%;">
+              <col style="width: 24%;">
+              <col style="width: 14%;">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>الجملة (Chunk)</th>
+                <th>الموعد القادم</th>
+                <th>خطة المراحل (1-4)</th>
+                <th>إجراء</th>
+              </tr>
+            </thead>
+            <tbody id="schedule-tbody">
+              ${visibleRows.map((row) => renderScheduleRow(row))}
+            </tbody>
+          </table>
+        </div>
+      `}
+
+    ${totalFiltered > 8
+      ? html`
+        <div class="sr-pagination-wrap">
+          <button class="btn btn-ghost btn-xs sr-show-more-btn" data-act="sr:toggle-show-all">
+            ${srTableShowAll ? 'عرض أقل (أول 8 فقط) ▲' : `عرض باقي الجمل (${totalFiltered - 8} جملة أخرى) ▼`}
+          </button>
+        </div>
+      `
+      : ''}
+  `;
+}
+
+function renderScheduleTable() {
+  const allRows = store.getScheduleRows();
+  const dueCount = allRows.filter((r) => r.isDue).length;
+
+  return html`
+    <div class="panel panel-pad schedule-panel" id="sr-schedule-panel">
+      <div class="between" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div>
+          <h2 style="font-size:18px">جدول تتبع مواعيد المراجعات (Spaced Repetition)</h2>
+          <p class="sub muted" style="font-size:12px">مواعيد دقيقة بالعدّ التنازلي المباشر للمراحل الأربع لكل جملة نشطة</p>
+        </div>
+        <div class="row" style="gap:8px;align-items:center">
+          ${dueCount > 0
+            ? html`<span class="chip chip-amber" id="due-count-pill">${dueCount} مستحق الآن</span>`
+            : html`<span class="chip chip-green" id="due-count-pill">كل المراجعات مجدولة</span>`}
+          <a class="btn btn-ghost btn-sm" href="#/review">${icon('clock')} صفحة المراجعة</a>
+        </div>
+      </div>
+
+      <div id="sr-table-container">
+        ${renderScheduleTableInner()}
+      </div>
+    </div>
+  `;
+}
+
 export const statsScreen = {
   render() {
     const stats = store.overall();
@@ -157,6 +348,8 @@ export const statsScreen = {
           </div>
         </div>
 
+        ${renderScheduleTable()}
+
         <div class="panel panel-pad">
           <div class="between" style="margin-bottom:10px">
             <h2 style="font-size:18px">آخر حركة</h2>
@@ -183,7 +376,44 @@ export const statsScreen = {
   },
 
   mount(root) {
+    const updateTable = () => {
+      const container = root.querySelector('#sr-table-container');
+      if (container) {
+        container.innerHTML = String(renderScheduleTableInner());
+      }
+      const allRows = store.getScheduleRows();
+      const dueCount = allRows.filter((r) => r.isDue).length;
+      const pill = root.querySelector('#due-count-pill');
+      if (pill) {
+        if (dueCount > 0) {
+          pill.className = 'chip chip-amber';
+          pill.textContent = `${dueCount} مستحق الآن`;
+        } else {
+          pill.className = 'chip chip-green';
+          pill.textContent = 'كل المراجعات مجدولة';
+        }
+      }
+    };
+
+    const timer = setInterval(() => {
+      updateTable();
+    }, 30000);
+
     const onClick = async (event) => {
+      const filterBtn = event.target.closest('[data-sr-filter]');
+      if (filterBtn) {
+        srTableFilter = filterBtn.dataset.srFilter;
+        updateTable();
+        return;
+      }
+
+      const toggleBtn = event.target.closest('[data-act="sr:toggle-show-all"]');
+      if (toggleBtn) {
+        srTableShowAll = !srTableShowAll;
+        updateTable();
+        return;
+      }
+
       const action = event.target.closest('[data-act]')?.dataset.act;
       if (action === 'export') {
         const result = await store.exportData();
@@ -200,6 +430,9 @@ export const statsScreen = {
       }
     };
     root.addEventListener('click', onClick);
-    return () => root.removeEventListener('click', onClick);
+    return () => {
+      clearInterval(timer);
+      root.removeEventListener('click', onClick);
+    };
   },
 };

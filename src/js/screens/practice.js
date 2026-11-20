@@ -70,8 +70,10 @@ function stepHead(index, title, sub, totalSteps = 4) {
 
 function chunkReference(chunk) {
   const parts = germanParts(chunk);
+  const pattern = chunk.template || chunk.patternKey || (chunk.family ? chunk.family.split(':')[1] : null);
   return html`
     <div class="ref-card">
+      ${pattern ? html`<div style="margin-bottom:8px"><span class="chip chip-blue de" style="font-size:12px;font-weight:600">قالب الجملة: ${pattern}</span></div>` : ''}
       <div class="de">
         ${parts.prefix ? html`<span class="tpl-mark">${parts.prefix}</span>` : ''}${parts.rest}
       </div>
@@ -92,8 +94,13 @@ function stepUnderstand(chunk, local, isLast = false) {
   return html`
     ${stepHead(1, 'افهم الـChunk', 'اقرأ الجملة، افهم معناها بالعربي، وحدد وظيفتها قبل أي تدريب.', isLast ? 5 : 4)}
     <div class="chunk-hero">
-      <div class="de">
-        ${parts.prefix ? html`<span class="tpl-mark">${parts.prefix}</span>` : ''}${parts.rest}
+      <div class="chunk-hero-header">
+        <div class="de">
+          ${parts.prefix ? html`<span class="tpl-mark">${parts.prefix}</span>` : ''}${parts.rest}
+        </div>
+        <button class="chunk-hero-speak-btn" data-act="say" data-rate="1.0" title="استمع لنطق الجملة (VoiceStudio)" aria-label="استمع لنطق الجملة">
+          ${icon('speaker')}
+        </button>
       </div>
       ${local.revealed
         ? html`<div class="ar-reveal">${chunk.ar}</div>`
@@ -106,7 +113,7 @@ function stepUnderstand(chunk, local, isLast = false) {
       <div class="chunk-tags">
         <span class="chip level-chip">${chunk.level}</span>
         <span class="chip">${chunk.id}</span>
-        ${chunk.template ? html`<span class="chip chip-yellow">القالب: ${chunk.template}</span>` : ''}
+        ${chunk.template || chunk.patternKey ? html`<span class="chip chip-blue de" style="font-weight:600">قالب الجملة: ${chunk.template || chunk.patternKey}</span>` : ''}
       </div>
     </div>
 
@@ -172,9 +179,9 @@ function stepSpeak(chunk, local, isLast = false) {
     ${stepHead(2, 'انطقه بصوت عالي', 'تلات مرات بس: بطيء، طبيعي، وبعدين من غير ما تبص على الجملة.', isLast ? 5 : 4)}
     ${chunkReference(chunk)}
     <div class="tts-row">
-      <button class="speak-btn" data-act="say" data-rate="0.62">${icon('speaker')} اسمعه بطيء</button>
-      <button class="speak-btn" data-act="say" data-rate="0.95">${icon('speaker')} اسمعه طبيعي</button>
-      <button class="speak-btn" data-act="blind" data-autofocus>${icon('eye-off')} من غير ما تبص</button>
+      <button class="speak-btn" data-act="say" data-rate="0.75" title="نطق بطيء وواضح">${icon('speaker')} اسمعه ببطء</button>
+      <button class="speak-btn" data-act="say" data-rate="1.0" title="نطق بالسرعة العادية">${icon('speaker')} اسمعه طبيعي</button>
+      <button class="speak-btn speak-btn-shadow" data-act="shadow" data-rate="1.0" title="تشغيل الصوت للمحاكاة والترديد المتزامن">${icon('speaker')} ردد في نفس الوقت</button>
     </div>
     ${!ttsOn
       ? html`<div class="callout">${icon('speaker')}<span>الصوت متوقف من الإعدادات — تقدر ترجعه من صفحة الإعدادات.</span></div>`
@@ -414,6 +421,7 @@ function stepGroupFinale(chunk, local) {
   const siblings = store.siblings(chunk.id, 5);
   const voice = local.voice;
   const templateTitle = group?.title || chunk.template || chunk.de;
+  const groupTemplates = group?.templates || [chunk.template || chunk.de];
 
   return html`
     <div class="step-head">
@@ -422,11 +430,26 @@ function stepGroupFinale(chunk, local) {
       </div>
       <h2>المرحلة الختامية للمجموعة: غيّر كل مرة (5 تنويعات للقالب)</h2>
       <p class="step-sub">
-        أتممت التدريب على جمل المجموعة! دلوقتي هتطبّق 5 تنويعات جديدة على قالب «<b class="de" style="color:var(--ink)">${templateTitle}</b>» عبر المحاور الأربعة (الفاعل، الزمن، الكلمات، الموقف) لاعتماد إتقان المجموعة بالكامل (+150 XP).
+        أتممت التدريب على جمل المجموعة! دلوقتي هتطبّق 5 تنويعات جديدة مستوحاة من قوالب «<b class="de" style="color:var(--ink)">${templateTitle}</b>» عبر المحاور الأربعة (الفاعل، الزمن، الكلمات، الموقف) لاعتماد إتقان المجموعة بالكامل (+150 XP).
       </p>
     </div>
 
     ${chunkReference(chunk)}
+
+    <div class="group-tpl-inspiration" style="margin:14px 0;padding:12px;background:var(--card-2);border-radius:var(--radius-sm);border:1px solid var(--line-soft)">
+      <div style="font-size:12px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        <span>💡</span> <span>قوالب المجموعة للاستلهام (انقر على أي قالب لتعبئته كبداية للجملة):</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${groupTemplates.map(
+          (tpl) => html`
+            <button type="button" class="chip chip-blue de" data-act="insert-tpl" data-tpl="${tpl}" style="cursor:pointer;font-size:12px;padding:4px 10px;border:1px solid var(--border)" title="استخدم هذا القالب">
+              ${tpl}
+            </button>
+          `,
+        )}
+      </div>
+    </div>
 
     ${groupDone
       ? html`
@@ -588,7 +611,7 @@ export const practiceScreen = {
             <strong>${chunk.level} · ${chunk.id}</strong>
             <span class="dot-sep"></span>
             ${group
-              ? html`<span class="sub" style="color:var(--ink);font-weight:600">مجموعة: <span class="de">${group.title}</span> (${groupPos.position} من ${groupPos.total})</span>`
+              ? html`<span class="sub" style="color:var(--ink);font-weight:600">${group.title} (${groupPos.position} من ${groupPos.total})</span>`
               : html`<span class="sub muted">${chunk.family ? `قالب: ${chunk.template}` : 'جملة مستقلة'}</span>`}
             <span class="dot-sep"></span>
             ${group?.variationDone
@@ -991,8 +1014,28 @@ export const practiceScreen = {
       `;
     };
 
+    const stopAllMedia = () => {
+      if (recorder && recorder.state === 'recording') {
+        try { recorder.stop(); } catch {}
+      }
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = null;
+      }
+      cancelVoice();
+      speech.stop();
+      if (panel) {
+        panel.querySelectorAll('audio').forEach((a) => {
+          try {
+            a.pause();
+            a.currentTime = 0;
+          } catch {}
+        });
+      }
+    };
+
     const goToStep = (target) => {
-      if (step === 5 && target !== 5) cancelVoice();
+      stopAllMedia();
       const isLast = !next?.inGroup;
       const maxSteps = isLast ? 5 : 4;
       const nextStep = clamp(target, 1, maxSteps);
@@ -1008,6 +1051,13 @@ export const practiceScreen = {
       const top = panel.getBoundingClientRect().top + window.scrollY - 96;
       if (top > 0 && window.scrollY > top - 40) {
         window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      }
+      if (step === 1 && store.state.settings.tts !== false) {
+        setTimeout(() => {
+          if (!disposed && step === 1) {
+            speak(1.0);
+          }
+        }, 120);
       }
     };
 
@@ -1045,6 +1095,7 @@ export const practiceScreen = {
     };
 
     async function startRecording(button) {
+      speech.stop();
       if (recorder && recorder.state === 'recording') {
         recorder.stop();
         return;
@@ -1177,15 +1228,32 @@ export const practiceScreen = {
       }
     }
 
-    const speak = async (rate) => {
+    const speak = async (rate = 1.0, { isShadowing = false } = {}) => {
       if (!store.state.settings.tts) {
         toast('الصوت متوقف من الإعدادات', 'speaker');
         return;
       }
-      const button = panel.querySelector(`[data-act="say"][data-rate="${rate}"]`);
-      button?.classList.add('is-playing');
-      await speech.speak(chunk.de, { rate, voiceName: store.state.settings.voice });
-      button?.classList.remove('is-playing');
+      stopAllMedia();
+      const numRate = Number(rate) || 1.0;
+      let activeButtons = [];
+      if (isShadowing) {
+        activeButtons = Array.from(panel.querySelectorAll('[data-act="shadow"]'));
+        toast('استمع وردد فوراً مع الصوت (Shadowing) 🎙️', 'speaker');
+      } else if (step === 1) {
+        activeButtons = Array.from(panel.querySelectorAll('.chunk-hero-speak-btn, [data-act="say"]'));
+      } else {
+        activeButtons = Array.from(panel.querySelectorAll(`[data-act="say"][data-rate="${numRate}"]`));
+      }
+
+      activeButtons.forEach((b) => b.classList.add('is-playing'));
+
+      await speech.speak(chunk.de, {
+        rate: numRate,
+        chunkId: chunk.id,
+        voiceName: store.state.settings.voice,
+      });
+
+      activeButtons.forEach((b) => b.classList.remove('is-playing'));
     };
 
     const handleAction = async (action, target) => {
@@ -1236,7 +1304,10 @@ export const practiceScreen = {
           break;
         }
         case 'say':
-          speak(Number(target.dataset.rate) || 0.95);
+          speak(Number(target.dataset.rate) || 1.0);
+          break;
+        case 'shadow':
+          speak(1.0, { isShadowing: true });
           break;
         case 'blind':
           openBlindTest();
@@ -1300,6 +1371,21 @@ export const practiceScreen = {
             showXPToast(5, `سجلت تنويع في محور ${store.axisTitle(axis)}`);
           }
           paint();
+          break;
+        }
+        case 'insert-tpl': {
+          const tpl = target.dataset.tpl || '';
+          const cleanTpl = tpl.replace(/\s*…$/, '').trim();
+          if (!cleanTpl) break;
+          const firstArea = panel.querySelector('textarea[data-draft]');
+          if (firstArea) {
+            const axis = firstArea.dataset.draft;
+            local.drafts[axis] = cleanTpl + ' ';
+            firstArea.value = cleanTpl + ' ';
+            firstArea.focus();
+            firstArea.setSelectionRange(firstArea.value.length, firstArea.value.length);
+            toast(`تم وضع القالب: ${cleanTpl}`, 'spark');
+          }
           break;
         }
         case 'vary:del': {
@@ -1502,14 +1588,42 @@ export const practiceScreen = {
     const onKey = (event) => {
       if (event.key === 'Escape' && !document.querySelector('.modal-backdrop')) {
         location.hash = `#/level/${chunk.level}`;
+        return;
       }
-      if (event.altKey && event.key === 'ArrowLeft') goToStep(step - 1);
-      if (event.altKey && event.key === 'ArrowRight') goToStep(step + 1);
+      if (event.altKey && event.key === 'ArrowLeft') {
+        goToStep(step - 1);
+        return;
+      }
+      if (event.altKey && event.key === 'ArrowRight') {
+        goToStep(step + 1);
+        return;
+      }
+      // F key shortcut (or Arabic layout 'ب') to trigger recording / speak
+      const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+      if (!isInput && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (event.code === 'KeyF' || event.key === 'f' || event.key === 'F' || event.key === 'ب') {
+          event.preventDefault();
+          const recBtn = panel?.querySelector('[data-act="record"]') || panel?.querySelector('.record-box button');
+          if (recBtn) {
+            startRecording(recBtn);
+          } else if (step === 1 || step === 2) {
+            speak(1.0);
+          }
+        }
+      }
     };
     document.addEventListener('keydown', onKey);
 
     paint();
     setSaveFlag('saved');
+
+    if (step === 1 && store.state.settings.tts !== false) {
+      setTimeout(() => {
+        if (!disposed && step === 1) {
+          speak(1.0);
+        }
+      }, 180);
+    }
 
     clockTick = setInterval(() => {
       if (sessionClock) sessionClock.textContent = formatClock((Date.now() - startedAt) / 1000);
@@ -1531,15 +1645,13 @@ export const practiceScreen = {
 
     return () => {
       disposed = true;
-      cancelVoice();
+      root.removeEventListener('click', onClick);
+      stopAllMedia();
       clearInterval(clockTick);
       clearInterval(heartbeat);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('visibilitychange', onVisibility);
       window.speechSynthesis?.removeEventListener?.('voiceschanged', onVoices);
-      speech.stop();
-      if (recorder && recorder.state === 'recording') recorder.stop();
-      stream?.getTracks().forEach((track) => track.stop());
       if (recUrl) URL.revokeObjectURL(recUrl);
       store.onSaved = null;
       store.heartbeat((Date.now() - startedAt) / 1000 > 60 ? 30 : 0);
