@@ -15,6 +15,7 @@ import { libraryScreen } from './screens/library.js';
 import { audioEngine } from './audioEngine.js';
 import { trophyManager } from './trophies.js';
 import { reviewScheduler } from './scheduler.js';
+import { initI18n, applyDOMLocalization } from './i18n.js';
 
 const routes = [
   { name: 'home', pattern: /^\/?$/, screen: homeScreen },
@@ -116,6 +117,7 @@ function route() {
     cleanup = match.screen.mount?.(view, context) || null;
     current = match;
     updateChrome(match.name);
+    applyDOMLocalization(document.body);
   } catch (error) {
     console.error(error);
     view.innerHTML = String(failScreen(error));
@@ -184,6 +186,7 @@ async function boot() {
   if (new URLSearchParams(location.search).get('debug') === '1') window.__store = store;
 
   window.addEventListener('hashchange', route);
+  initI18n(() => route());
   window.addEventListener('beforeunload', () => {
     store.flush();
   });

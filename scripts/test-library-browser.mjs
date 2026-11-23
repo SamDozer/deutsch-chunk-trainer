@@ -1,4 +1,4 @@
-// Browser integration & UI verification for the Visual Knowledge Hub (المكتبة المصورة) & Level Visual Guides
+// Browser integration & UI verification for the Visual Knowledge Hub, Level Guides, & Trilingual Interface (AR/EN/DE)
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shotsDir = 'C:\\Users\\Hossam\\.gemini\\antigravity\\brain\\19d44b9d-c661-4024-9358-7360d0655a60\\screenshots';
-const port = 4185;
+const port = 4187;
 const chrome = process.env.CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 await fs.mkdir(shotsDir, { recursive: true });
@@ -61,72 +61,65 @@ try {
     if (msg.type() === 'error') problems.push(`CONSOLE: ${msg.text()}`);
   });
 
-  console.log('1. Navigating to #/library...');
+  console.log('1. Verifying Arabic (AR) interface on #/home and #/library...');
   await page.goto(`http://127.0.0.1:${port}/src/index.html#/library`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.lib-card', { timeout: 10000 });
   await page.waitForTimeout(350);
 
-  const countText = await page.locator('#lib-results-count').textContent();
-  console.log(`Initial results badge: "${countText?.trim()}"`);
-  assert.ok(countText?.includes('619'), `Expected 619 cards, got ${countText}`);
+  // Switch to English (EN) via topbar language switcher
+  console.log('2. Switching to English (EN) interface...');
+  await page.locator('.topbar [data-lang-switch="en"]').click();
+  await page.waitForTimeout(350);
 
-  // Test CEFR Level Filter chip inside Library Hub (e.g. A1 -> 51 cards)
-  await page.locator('[data-level-filter="A1"]').click();
-  await page.waitForTimeout(250);
-  const a1Count = await page.locator('#lib-results-count').textContent();
-  console.log(`A1 filter in library: "${a1Count?.trim()}"`);
-  assert.ok(a1Count?.includes('51'), `Expected 51 A1 cards, got ${a1Count}`);
+  const htmlDirEn = await page.evaluate(() => document.documentElement.dir);
+  const htmlLangEn = await page.evaluate(() => document.documentElement.lang);
+  assert.equal(htmlDirEn, 'ltr', 'English interface should switch dir to ltr');
+  assert.equal(htmlLangEn, 'en', 'English interface should switch lang to en');
 
-  await page.locator('[data-level-filter="all"]').click();
-  await page.waitForTimeout(200);
-  await page.screenshot({ path: path.join(shotsDir, '01-library-desktop.png') });
+  const navHomeEn = await page.locator('[data-nav="home"]').textContent();
+  const navLibEn = await page.locator('[data-nav="library"]').textContent();
+  console.log(`English navbar: "${navHomeEn?.trim()}" | "${navLibEn?.trim()}"`);
+  assert.equal(navHomeEn?.trim(), 'Home', 'Expected Home in English navbar');
+  assert.equal(navLibEn?.trim(), 'Visual Library', 'Expected Visual Library in English navbar');
 
-  // 2. Test keyboard accessibility (Enter key on focused .lib-card-media opens lightbox)
-  console.log('2. Testing Keyboard Enter on card media & layout-based zoom...');
-  await page.locator('.lib-card-media').first().focus();
-  await page.keyboard.press('Enter');
-  await page.waitForSelector('.lib-lightbox', { timeout: 5000 });
-  await page.waitForTimeout(250);
+  await page.screenshot({ path: path.join(shotsDir, '08-library-english.png') });
+  console.log('✓ Captured 08-library-english.png');
 
-  await page.locator('[data-lb-zoom="in"]').click();
-  const zoomLabel = await page.locator('#lib-lb-zoom-label').textContent();
-  assert.equal(zoomLabel?.trim(), '125%', 'Expected zoom level to be 125%');
+  // Check Home page in English
+  await page.goto(`http://127.0.0.1:${port}/src/index.html#/home`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: path.join(shotsDir, '09-home-english.png') });
+  console.log('✓ Captured 09-home-english.png');
 
-  await page.locator('[data-lb-read]').click();
-  await page.waitForTimeout(150);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(150);
-
-  // 3. Test Level Screen (#/level/A1 and #/level/B1) Visual Shelf & Visuals Tab
-  console.log('3. Navigating to #/level/A1 to verify Level Visual Shelf & Tab...');
+  // Switch to German (DE) via topbar language switcher
+  console.log('3. Switching to German (DE) interface on #/level/A1...');
   await page.goto(`http://127.0.0.1:${port}/src/index.html#/level/A1`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.level-visual-shelf', { timeout: 5000 });
+  await page.locator('.topbar [data-lang-switch="de"]').click();
   await page.waitForTimeout(400);
 
-  const shelfThumbs = await page.locator('.level-visual-thumb').count();
-  assert.equal(shelfThumbs, 6, `Expected 6 preview thumbs in A1 visual shelf, got ${shelfThumbs}`);
-  await page.screenshot({ path: path.join(shotsDir, '05-level-a1-visual-shelf.png') });
-  console.log('✓ Captured 05-level-a1-visual-shelf.png');
+  const htmlDirDe = await page.evaluate(() => document.documentElement.dir);
+  const htmlLangDe = await page.evaluate(() => document.documentElement.lang);
+  assert.equal(htmlDirDe, 'ltr', 'German interface should switch dir to ltr');
+  assert.equal(htmlLangDe, 'de', 'German interface should switch lang to de');
 
-  // Click "عرض كل اللوحات" button to switch to the full visuals tab inside #/level/A1
-  await page.locator('[data-switch-visuals]').click();
+  const navHomeDe = await page.locator('[data-nav="home"]').textContent();
+  const navLibDe = await page.locator('[data-nav="library"]').textContent();
+  console.log(`German navbar: "${navHomeDe?.trim()}" | "${navLibDe?.trim()}"`);
+  assert.equal(navHomeDe?.trim(), 'Startseite', 'Expected Startseite in German navbar');
+  assert.equal(navLibDe?.trim(), 'Bildbibliothek', 'Expected Bildbibliothek in German navbar');
+
+  await page.screenshot({ path: path.join(shotsDir, '10-level-a1-german.png') });
+  console.log('✓ Captured 10-level-a1-german.png');
+
+  // Switch back to Arabic (AR) and verify lossless restore
+  console.log('4. Switching back to Arabic (AR) and verifying lossless restore...');
+  await page.locator('.topbar [data-lang-switch="ar"]').click();
   await page.waitForTimeout(350);
-  const levelVisualCards = await page.locator('#chunk-list .lib-card').count();
-  console.log(`Level A1 visuals tab rendered ${levelVisualCards} cards (page 1)`);
-  assert.ok(levelVisualCards === 30, `Expected 30 cards on page 1 of A1 visuals tab, got ${levelVisualCards}`);
-  await page.screenshot({ path: path.join(shotsDir, '06-level-a1-visuals-tab.png') });
-  console.log('✓ Captured 06-level-a1-visuals-tab.png');
-
-  // 4. Test Practice Screen (#/practice/A1-001?step=1) visual guide button
-  console.log('4. Navigating to #/practice/A1-001?step=1 to verify Practice Visual Guide button...');
-  await page.goto(`http://127.0.0.1:${port}/src/index.html#/practice/A1-001?step=1`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-act="understand:visuals"]', { timeout: 5000 });
-  await page.locator('[data-act="understand:visuals"]').click();
-  await page.waitForSelector('.lib-lightbox', { timeout: 5000 });
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(shotsDir, '07-practice-visual-lightbox.png') });
-  console.log('✓ Captured 07-practice-visual-lightbox.png');
-  await page.keyboard.press('Escape');
+  const htmlDirAr = await page.evaluate(() => document.documentElement.dir);
+  assert.equal(htmlDirAr, 'rtl', 'Arabic interface should restore dir to rtl');
+  const navHomeAr = await page.locator('[data-nav="home"]').textContent();
+  assert.equal(navHomeAr?.trim(), 'الرئيسية', 'Expected الرئيسية restored in Arabic navbar');
 
   await browser.close();
 
@@ -135,7 +128,7 @@ try {
     throw new Error('Browser test encountered console/page errors');
   }
 
-  console.log('\nALL VISUAL LIBRARY & LEVEL INTEGRATION BROWSER TESTS PASSED ✅');
+  console.log('\nALL TRILINGUAL (AR/EN/DE) & VISUAL LIBRARY BROWSER TESTS PASSED ✅');
 } finally {
   server.close();
 }

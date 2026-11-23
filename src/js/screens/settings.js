@@ -54,6 +54,17 @@ export const settingsScreen = {
           <div class="stack" style="--gap:18px">
             <section class="set-group">
               <div class="set-group-head"><h2>التفضيلات</h2><p>اليومي والواجهة</p></div>
+              <div class="set-row">
+                <div>
+                  <div class="set-label">لغة الواجهة · Interface Language · Sprache</div>
+                  <div class="set-desc">تبديل فوري ودقيق للواجهة بالكامل بين العربية والإنجليزية والألمانية</div>
+                </div>
+                <div class="lang-switcher is-large" role="group" aria-label="Interface Language">
+                  <button type="button" class="lang-btn" data-lang-switch="ar">🇪🇬 العربية</button>
+                  <button type="button" class="lang-btn" data-lang-switch="en">🇬🇧 English</button>
+                  <button type="button" class="lang-btn" data-lang-switch="de">🇩🇪 Deutsch</button>
+                </div>
+              </div>
               ${switchRow('theme', 'الوضع الليلي', 'ألوان هادية للعين في المذاكرة بالليل', settings.theme === 'dark')}
               ${rangeRow(
                 'dailyGoal',
