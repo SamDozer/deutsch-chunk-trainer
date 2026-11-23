@@ -11,6 +11,7 @@ import { settingsScreen } from './screens/settings.js';
 import { methodScreen } from './screens/method.js';
 import { trophiesScreen } from './screens/trophies.js';
 import { chillScreen } from './screens/chill.js';
+import { libraryScreen } from './screens/library.js';
 import { audioEngine } from './audioEngine.js';
 import { trophyManager } from './trophies.js';
 import { reviewScheduler } from './scheduler.js';
@@ -18,6 +19,7 @@ import { reviewScheduler } from './scheduler.js';
 const routes = [
   { name: 'home', pattern: /^\/?$/, screen: homeScreen },
   { name: 'home', pattern: /^\/home$/, screen: homeScreen },
+  { name: 'library', pattern: /^\/library(?:\/([^/]+))?$/, screen: libraryScreen, keys: ['topicId'] },
   { name: 'level', pattern: /^\/level\/([A-Z]\d)$/, screen: levelScreen, keys: ['levelId'] },
   { name: 'practice', pattern: /^\/practice\/([A-Z]\d-\d{3})$/, screen: practiceScreen, keys: ['chunkId'] },
   { name: 'review', pattern: /^\/review$/, screen: reviewScreen },
