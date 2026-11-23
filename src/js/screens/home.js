@@ -95,6 +95,9 @@ export const homeScreen = {
               <a class="btn btn-primary" href="#/practice/${focus.chunkId}?step=${step}">
                 ${icon('play')} افتح الجلسة
               </a>
+              <a class="btn btn-ghost" href="#/library">
+                ${icon('library')} المكتبة المصورة (619 لوحة)
+              </a>
               ${stats.due > 0 ? html`<a class="btn btn-ghost" href="#/review">${icon('clock')} راجع ${stats.due} مستحق</a>` : ''}
               <button class="btn btn-quiet" data-scroll="levels">شوف المستويات ${icon('forward')}</button>
             </div>
