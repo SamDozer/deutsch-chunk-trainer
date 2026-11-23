@@ -55,7 +55,7 @@ const FOLDER_MAP = {
     topicId: 'a1-a2',
     title: 'مستوى A1 – A2',
     badge: 'A1-A2',
-    desc: 'أساسيات تكوين الجمل، الأفعال المنفصلة، والماضي البسيط والمركب',
+    desc: 'أساسيات تكوين الجمل، الأفعال المنفصلة، حروف الجر، والماضي البسيط والمركب',
   },
   '🌿│b1-b2material': {
     pillarId: 'levels-grammar',
@@ -69,14 +69,14 @@ const FOLDER_MAP = {
     topicId: 'c1',
     title: 'مستوى C1 المتقدم',
     badge: 'C1',
-    desc: 'التعبيرات الأكاديمية، الروابط الرسمية، وتراكيب المستوى المتقدم',
+    desc: 'التعبيرات الأكاديمية، الكلام غير المباشر (Konjunktiv I)، وتراكيب المستوى المتقدم',
   },
   '📐│grammatik': {
     pillarId: 'levels-grammar',
     topicId: 'grammatik',
     title: 'قواعد الألمانية الشاملة (Grammatik)',
     badge: 'Grammatik',
-    desc: 'خرائط ذهنية وجداول مقارنة لأهم قواعد اللغة الألمانية',
+    desc: 'خرائط ذهنية وجداول مقارنة لأهم قواعد اللغة الألمانية بالعربي',
   },
   '📚│neue-wörter': {
     pillarId: 'vocab-idioms',
@@ -97,7 +97,7 @@ const FOLDER_MAP = {
     topicId: 'umgangssprache',
     title: 'لغة الشارع والحياة اليومية (Umgangssprache)',
     badge: 'Alltag',
-    desc: 'تعبيرات عامية ويومية يستخدمها الألمان في الحياة الحقيقية',
+    desc: 'تعبيرات عامية، اختصارات الكلام، وجداول ثنائية اللغة للحياة اليومية',
   },
   '💼│kundenservice-material': {
     pillarId: 'vocab-idioms',
@@ -111,7 +111,7 @@ const FOLDER_MAP = {
     topicId: 'griechische-mythologie',
     title: 'الأساطير اليونانية (Griechische Mythologie)',
     badge: 'Mythos',
-    desc: 'قصص سيزيف، بروميثيوس، وأبطال الأساطير اليونانية بالألمانية',
+    desc: 'قصص سيزيف، نارسيس، وأبطال الأساطير اليونانية بالألمانية',
   },
   '📿│ägyptische-mythologie': {
     pillarId: 'myth-history',
@@ -227,7 +227,6 @@ const FOLDER_MAP = {
   },
 };
 
-// Folders excluded completely (non-learning / app UI screenshots / torrent screenshot / personal photo)
 const EXCLUDED_FOLDERS = new Set([
   '🎬│videos-und-medien',
   '👥│duo-raum',
@@ -235,28 +234,120 @@ const EXCLUDED_FOLDERS = new Set([
   '🤖│ki-lerntools',
 ]);
 
-// Special routing for 🗣️│Sprechgruppe (Max 3):
-// Keep the 6 high-value B1 Satzbau / -dem grammar cards and route them to b1-b2, skip the 10 low-res quiz/voice UI screenshots
-function routeSpecialFile(folderName, fileName, fileSize) {
+function routeSpecialFile(folderName, fileName) {
   if (folderName === '🗣️│Sprechgruppe (Max 3)') {
     if (fileName.startsWith('ChatGPT_Image_') || fileName === 'image_1558665991150501919.png') {
       return FOLDER_MAP['🌿│b1-b2material'];
     }
-    return null; // exclude voice/quiz UI screenshot
+    return null;
   }
   return FOLDER_MAP[folderName] || null;
+}
+
+/**
+ * Assign exact CEFR levels (A1, A2, B1, B2, C1) to every card so each level page
+ * (#/level/A1 .. #/level/C1) surfaces the most useful Arabic visual guides.
+ */
+function assignLevelsForCard(topicId, fileName, seqNum) {
+  const base = path.basename(fileName, path.extname(fileName));
+
+  if (topicId === 'a1-a2') {
+    if (/^A2/i.test(base) || /Hauptsatz_Nebensatz/i.test(base)) return ['A2'];
+    if (/Oct_9_2026_06_43/i.test(base)) return ['A1']; // A1 - Satzbau 1..5
+    return ['A1', 'A2']; // Imperativ, temporal prepositions, mehr als, etc.
+  }
+
+  if (topicId === 'b1-b2') {
+    if (/Oct_9_2026_07_02/i.test(base) || /Sep_24_2026_09_18/i.test(base) || base === 'image_1558665991150501919') {
+      return ['B1']; // B1 - Satzbau 1..7 & -dem connectors
+    }
+    if (/Oct_9_2026_07_11|Oct_9_2026_07_12|Oct_10_2026_08_33/i.test(base)) {
+      return ['B2']; // B2 - Satzbau 1..9 & B2-C1 vocab cards
+    }
+    return ['B1', 'B2'];
+  }
+
+  if (topicId === 'c1') {
+    return ['C1'];
+  }
+
+  if (topicId === 'grammatik') {
+    // Distribute comprehensive grammar sheets across all levels, with core rules in A1-B2
+    if (seqNum <= 25) return ['A1', 'A2', 'B1'];
+    if (seqNum <= 50) return ['A2', 'B1', 'B2'];
+    return ['B1', 'B2', 'C1'];
+  }
+
+  if (topicId === 'umgangssprache') {
+    if (/^Bilingual_table/i.test(base)) return ['A1', 'A2', 'B1'];
+    return ['A2', 'B1', 'B2'];
+  }
+
+  if (topicId === 'redemittel-idiome') {
+    if (seqNum <= 20) return ['A2', 'B1'];
+    return ['B1', 'B2', 'C1'];
+  }
+
+  if (topicId === 'neue-woerter') {
+    if (seqNum <= 35) return ['A2', 'B1'];
+    if (seqNum <= 75) return ['B1', 'B2'];
+    return ['B2', 'C1'];
+  }
+
+  if (topicId === 'kundenservice') {
+    return ['B1', 'B2'];
+  }
+
+  if (topicId === 'prophetengeschichten' || topicId === 'deutsche-kultur' || topicId === 'themen') {
+    return ['A2', 'B1'];
+  }
+
+  if (
+    topicId === 'griechische-mythologie' ||
+    topicId === 'aegyptische-mythologie' ||
+    topicId === 'aegyptische-geschichte' ||
+    topicId === 'filme-serien' ||
+    topicId === 'lern-algorithmen'
+  ) {
+    return ['B1', 'B2'];
+  }
+
+  // Philosophy, Psychology, Literature, Politics -> B2 & C1 advanced reading
+  return ['B2', 'C1'];
 }
 
 function cleanHumanTitle(fileName, topicTitle, indexInTopic) {
   const base = path.basename(fileName, path.extname(fileName));
 
-  // Recognize named German series
   if (/^A2_Satzbau_(\d+)/i.test(base)) {
-    const num = RegExp.$1;
-    return `تراكيب جمل A2 (Satzbau) — بطاقة ${Number(num)}`;
+    return `تراكيب جمل A2 (A2 - Satzbau) — لوحة ${Number(RegExp.$1)}`;
   }
   if (/^A2[-_]+(\d+)/i.test(base)) {
-    return `ملخص قواعد ومفردات A2 — جزء ${RegExp.$1}`;
+    return `ملخص قواعد وتراكيب A2 — جزء ${RegExp.$1}`;
+  }
+  if (/^Hauptsatz_Nebensatz/i.test(base)) {
+    return 'الفرق بين الجملة الأساسية والفرعية (Hauptsatz & Nebensatz)';
+  }
+  if (/^ChatGPT_Image_Oct_9_2026_06_43_\d+_PM-(\d+)/i.test(base)) {
+    return `تراكيب جمل A1 الأساسية (A1 - Satzbau) — لوحة ${RegExp.$1}`;
+  }
+  if (/^ChatGPT_Image_Sep_28_2026_09_21_\d+_AM-(\d+)/i.test(base)) {
+    return `صيغة الأمر في الألمانية (Der Imperativ A1–A2) — لوحة ${RegExp.$1}`;
+  }
+  if (/^ChatGPT_Image_Sep_28_2026_09_29_\d+_AM-(\d+)/i.test(base)) {
+    return `الماضي المركب مع sein و haben (Perfekt A1–A2) — لوحة ${RegExp.$1}`;
+  }
+  if (/^ChatGPT_Image_Sep_29_2026_06_14_\d+_PM-(\d+)/i.test(base)) {
+    return `حروف الجر الزمنية (um / am / im / seit / vor) — جزء ${RegExp.$1}`;
+  }
+  if (/^ChatGPT_Image_Oct_9_2026_07_02_\d+_PM-(\d+)/i.test(base)) {
+    return `تراكيب جمل B1 والروابط (B1 - Satzbau) — لوحة ${RegExp.$1}`;
+  }
+  if (/^ChatGPT_Image_Oct_9_2026_07_1[12]_\d+_PM-(\d+)/i.test(base)) {
+    return `تراكيب جمل B2 والمبني للمجهول (B2 - Satzbau) — لوحة ${RegExp.$1}`;
+  }
+  if (/^ChatGPT_Image_Oct_9_2026_07_31_\d+_PM-(\d+)/i.test(base)) {
+    return `تراكيب جمل C1 والكلام غير المباشر (C1 - Satzbau) — لوحة ${RegExp.$1}`;
   }
   if (/^German_Customer_Service_Operations_(\d+)(?:_(.+))?/i.test(base)) {
     const num = Number(RegExp.$1);
@@ -264,18 +355,27 @@ function cleanHumanTitle(fileName, topicTitle, indexInTopic) {
     return `دليل خدمة العملاء بالألمانية — فصل ${num}${extra}`;
   }
   if (/^Bilingual_table_with_Arabic_spelling_repair-(\d+)/i.test(base)) {
-    return `جدول تعبيرات الحياة اليومية — بطاقة ${RegExp.$1}`;
+    return `جدول تعبيرات الحياة اليومية (ألماني - عربي) — لوحة ${RegExp.$1}`;
+  }
+  if (/^Corrected_Arabic-English_glossary_page-(\d+)/i.test(base)) {
+    return `قاموس تعبيرات الشارع والاختصارات اليومية — صفحة ${RegExp.$1}`;
+  }
+  if (/^German_rap_glossary.*-(\d+)/i.test(base)) {
+    return `مصطلحات الشباب ولغة الشارع الألمانية — جزء ${RegExp.$1}`;
+  }
+  if (/^German_past_tense.*-(\d+)/i.test(base)) {
+    return `مقارنة أزمنة الماضي في الألمانية — لوحة ${RegExp.$1}`;
   }
   if (/^(\d{2})[-_](.+)$/.test(base)) {
     const num = Number(RegExp.$1);
-    let label = RegExp.$2
-      .replace(/_\d{15,}$/, '') // strip discord snowflake suffix
+    const label = RegExp.$2
+      .replace(/_\d{15,}$/, '')
       .replace(/_/g, ' ')
       .replace(/-/g, ' ')
       .trim();
     return `${num}. ${label}`;
   }
-  if (/^ChatGPT_Image_/i.test(base)) {
+  if (/^(?:ChatGPT_Image_|Gemini_Generated_Image_)/i.test(base)) {
     const m = base.match(/-(\d+)$/);
     const part = m ? ` (صفحة ${m[1]})` : '';
     return `${topicTitle} — لوحة تعليمية #${indexInTopic}${part}`;
@@ -288,10 +388,7 @@ function cleanHumanTitle(fileName, topicTitle, indexInTopic) {
 
 async function main() {
   console.log('Scanning Discord-Images directory...');
-  if (fs.existsSync(outAssetRoot)) {
-    fs.rmSync(outAssetRoot, { recursive: true, force: true });
-  }
-  fs.mkdirSync(outAssetRoot, { recursive: true });
+  const hasExistingWebp = fs.existsSync(outAssetRoot) && fs.readdirSync(outAssetRoot).length >= 25;
 
   const entries = fs.readdirSync(sourceRoot, { withFileTypes: true });
   const seenHashes = new Set();
@@ -342,7 +439,6 @@ async function main() {
 
   console.log(`Found ${rawCandidates.length} unique curated learning images (skipped ${skippedDuplicates} duplicates, ${skippedExcluded} non-learning screenshots).`);
 
-  // Group by topicId to assign clean sequential numbers and convert in parallel batches
   const byTopic = new Map();
   for (const item of rawCandidates) {
     if (!byTopic.has(item.topicId)) byTopic.set(item.topicId, []);
@@ -353,7 +449,6 @@ async function main() {
   let totalOrigBytes = 0;
   let totalOutBytes = 0;
   let processed = 0;
-
   const CONCURRENCY = 8;
 
   for (const [topicId, topicItems] of byTopic.entries()) {
@@ -370,27 +465,39 @@ async function main() {
           const outFileName = `${seqPad}-${item.hash}.webp`;
           const outDiskPath = path.join(topicOutDir, outFileName);
 
-          const image = sharp(item.fullPath, { animated: false });
-          const meta = await image.metadata();
+          let outWidth = 900;
+          let outHeight = 1350;
+          let outSize = 0;
 
-          // Resize if taller than 1350px or wider than 1350px while preserving aspect ratio
-          const maxDim = 1350;
-          let pipeline = image;
-          if ((meta.width && meta.width > maxDim) || (meta.height && meta.height > maxDim)) {
-            pipeline = pipeline.resize({
-              width: maxDim,
-              height: maxDim,
-              fit: 'inside',
-              withoutEnlargement: true,
-            });
+          if (hasExistingWebp && fs.existsSync(outDiskPath)) {
+            const st = fs.statSync(outDiskPath);
+            const meta = await sharp(outDiskPath).metadata();
+            outWidth = meta.width || 900;
+            outHeight = meta.height || 1350;
+            outSize = st.size;
+          } else {
+            const image = sharp(item.fullPath, { animated: false });
+            const meta = await image.metadata();
+            const maxDim = 1350;
+            let pipeline = image;
+            if ((meta.width && meta.width > maxDim) || (meta.height && meta.height > maxDim)) {
+              pipeline = pipeline.resize({
+                width: maxDim,
+                height: maxDim,
+                fit: 'inside',
+                withoutEnlargement: true,
+              });
+            }
+            const outInfo = await pipeline
+              .webp({ quality: 75, effort: 5, smartSubsample: true })
+              .toFile(outDiskPath);
+            outWidth = outInfo.width;
+            outHeight = outInfo.height;
+            outSize = outInfo.size;
           }
 
-          const outInfo = await pipeline
-            .webp({ quality: 75, effort: 5, smartSubsample: true })
-            .toFile(outDiskPath);
-
           totalOrigBytes += item.origBytes;
-          totalOutBytes += outInfo.size;
+          totalOutBytes += outSize;
           processed++;
 
           finalItems.push({
@@ -399,22 +506,22 @@ async function main() {
             pillarId: item.pillarId,
             topicId: item.topicId,
             badge: item.badge,
+            levels: assignLevelsForCard(item.topicId, item.origName, seqNum),
             title: cleanHumanTitle(item.origName, item.title, seqNum),
             origName: item.origName,
             src: `./assets/library/${topicId}/${outFileName}`,
-            width: outInfo.width,
-            height: outInfo.height,
-            sizeKB: Math.round(outInfo.size / 1024),
+            width: outWidth,
+            height: outHeight,
+            sizeKB: Math.round(outSize / 1024),
           });
         }),
       );
-      if (processed % 64 === 0 || processed === rawCandidates.length) {
-        console.log(`Converted ${processed}/${rawCandidates.length} images...`);
+      if (processed % 128 === 0 || processed === rawCandidates.length) {
+        console.log(`Processed ${processed}/${rawCandidates.length} images...`);
       }
     }
   }
 
-  // Sort items deterministically by topic order then sequence number
   const topicOrder = Object.values(FOLDER_MAP).map((t) => t.topicId);
   finalItems.sort((a, b) => {
     const tDiff = topicOrder.indexOf(a.topicId) - topicOrder.indexOf(b.topicId);
@@ -422,7 +529,6 @@ async function main() {
     return a.order - b.order;
   });
 
-  // Build topic summaries with counts
   const topicsList = [];
   const seenTopics = new Set();
   for (const t of Object.values(FOLDER_MAP)) {
@@ -447,21 +553,26 @@ async function main() {
     return { ...p, count, topicCount };
   });
 
+  const levelCounts = {};
+  for (const lv of ['A1', 'A2', 'B1', 'B2', 'C1']) {
+    levelCounts[lv] = finalItems.filter((it) => it.levels.includes(lv)).length;
+  }
+
   const manifest = {
-    version: '1.0.0',
+    version: '1.1.0',
     generatedAt: new Date().toISOString(),
     totalItems: finalItems.length,
     totalTopics: topicsList.length,
     origSizeMB: Number((totalOrigBytes / (1024 * 1024)).toFixed(2)),
     compressedSizeMB: Number((totalOutBytes / (1024 * 1024)).toFixed(2)),
+    levelCounts,
     pillars: pillarsWithCounts,
     topics: topicsList,
     items: finalItems,
   };
 
   fs.writeFileSync(outManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-  console.log(`\nDONE! Compressed ${finalItems.length} images from ${manifest.origSizeMB} MB -> ${manifest.compressedSizeMB} MB (${((1 - manifest.compressedSizeMB / manifest.origSizeMB) * 100).toFixed(1)}% saved).`);
-  console.log(`Manifest written to ${outManifestPath}`);
+  console.log(`\nDONE! Manifest updated with level mappings:`, levelCounts);
 }
 
 main().catch((err) => {

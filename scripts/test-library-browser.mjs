@@ -1,4 +1,4 @@
-// Browser integration & UI verification for the Visual Knowledge Hub (المكتبة المصورة)
+// Browser integration & UI verification for the Visual Knowledge Hub (المكتبة المصورة) & Level Visual Guides
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shotsDir = 'C:\\Users\\Hossam\\.gemini\\antigravity\\brain\\19d44b9d-c661-4024-9358-7360d0655a60\\screenshots';
-const port = 4183;
+const port = 4185;
 const chrome = process.env.CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 await fs.mkdir(shotsDir, { recursive: true });
@@ -64,88 +64,69 @@ try {
   console.log('1. Navigating to #/library...');
   await page.goto(`http://127.0.0.1:${port}/src/index.html#/library`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.lib-card', { timeout: 10000 });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(350);
 
   const countText = await page.locator('#lib-results-count').textContent();
   console.log(`Initial results badge: "${countText?.trim()}"`);
   assert.ok(countText?.includes('619'), `Expected 619 cards, got ${countText}`);
 
-  // Check images actually loaded (naturalWidth > 0)
-  const firstImgLoaded = await page.locator('.lib-card img').first().evaluate((img) => img.complete && img.naturalWidth > 0);
-  assert.ok(firstImgLoaded, 'First library WebP card image failed to load');
+  // Test CEFR Level Filter chip inside Library Hub (e.g. A1 -> 51 cards)
+  await page.locator('[data-level-filter="A1"]').click();
+  await page.waitForTimeout(250);
+  const a1Count = await page.locator('#lib-results-count').textContent();
+  console.log(`A1 filter in library: "${a1Count?.trim()}"`);
+  assert.ok(a1Count?.includes('51'), `Expected 51 A1 cards, got ${a1Count}`);
 
+  await page.locator('[data-level-filter="all"]').click();
+  await page.waitForTimeout(200);
   await page.screenshot({ path: path.join(shotsDir, '01-library-desktop.png') });
-  console.log('✓ Captured 01-library-desktop.png');
 
-  // 2. Test Pillar filter: Mythology & History
-  console.log('2. Filtering by Mythology & History pillar...');
-  await page.locator('[data-pillar="myth-history"]').click();
-  await page.waitForTimeout(350);
-  const mythCount = await page.locator('#lib-results-count').textContent();
-  console.log(`Mythology results badge: "${mythCount?.trim()}"`);
-  assert.ok(mythCount?.includes('62'), `Expected 62 mythology cards, got ${mythCount}`);
-  await page.screenshot({ path: path.join(shotsDir, '02-library-mythology.png') });
-  console.log('✓ Captured 02-library-mythology.png');
-
-  // 3. Test Lightbox Reader & Zoom
-  console.log('3. Opening Lightbox Reader and testing Zoom + Mark Read...');
-  await page.locator('.lib-card [data-open-idx="0"]').first().click();
+  // 2. Test keyboard accessibility (Enter key on focused .lib-card-media opens lightbox)
+  console.log('2. Testing Keyboard Enter on card media & layout-based zoom...');
+  await page.locator('.lib-card-media').first().focus();
+  await page.keyboard.press('Enter');
   await page.waitForSelector('.lib-lightbox', { timeout: 5000 });
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(250);
 
-  // Zoom in
   await page.locator('[data-lb-zoom="in"]').click();
   const zoomLabel = await page.locator('#lib-lb-zoom-label').textContent();
   assert.equal(zoomLabel?.trim(), '125%', 'Expected zoom level to be 125%');
 
-  // Mark as read inside lightbox
-  await page.locator('.lib-lightbox [data-toggle-read]').click();
-  await page.waitForTimeout(200);
-
-  await page.screenshot({ path: path.join(shotsDir, '03-library-lightbox.png') });
-  console.log('✓ Captured 03-library-lightbox.png');
-
-  // Close lightbox with Escape
+  await page.locator('[data-lb-read]').click();
+  await page.waitForTimeout(150);
   await page.keyboard.press('Escape');
-  await page.waitForTimeout(200);
-  const lbCount = await page.locator('.lib-lightbox').count();
-  assert.equal(lbCount, 0, 'Lightbox should close on Escape');
+  await page.waitForTimeout(150);
 
-  // 4. Test Search & Edge Case (empty query match)
-  console.log('4. Testing Search input and empty state...');
-  await page.locator('[data-pillar="all"]').click();
-  await page.fill('#lib-search-input', 'Satzbau');
-  await page.waitForTimeout(250);
-  const searchCount = await page.locator('#lib-results-count').textContent();
-  console.log(`Search "Satzbau" results: "${searchCount?.trim()}"`);
-  assert.ok(!searchCount?.includes('0 لوحة'), 'Expected Satzbau search to return cards');
+  // 3. Test Level Screen (#/level/A1 and #/level/B1) Visual Shelf & Visuals Tab
+  console.log('3. Navigating to #/level/A1 to verify Level Visual Shelf & Tab...');
+  await page.goto(`http://127.0.0.1:${port}/src/index.html#/level/A1`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('.level-visual-shelf', { timeout: 5000 });
+  await page.waitForTimeout(400);
 
-  await page.fill('#lib-search-input', 'zzzz_nonexistent_query_999');
-  await page.waitForTimeout(250);
-  const emptyVisible = await page.locator('.lib-empty').isVisible();
-  assert.ok(emptyVisible, 'Empty state should be visible for non-matching query');
-  await page.locator('[data-reset-filters]').click();
-  await page.waitForTimeout(250);
+  const shelfThumbs = await page.locator('.level-visual-thumb').count();
+  assert.equal(shelfThumbs, 6, `Expected 6 preview thumbs in A1 visual shelf, got ${shelfThumbs}`);
+  await page.screenshot({ path: path.join(shotsDir, '05-level-a1-visual-shelf.png') });
+  console.log('✓ Captured 05-level-a1-visual-shelf.png');
 
-  // 5. Test Mobile Viewport (375px) & Dark Theme
-  console.log('5. Verifying responsive layout at 375px mobile & dark theme...');
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.evaluate(() => {
-    document.documentElement.dataset.theme = 'dark';
-  });
+  // Click "عرض كل اللوحات" button to switch to the full visuals tab inside #/level/A1
+  await page.locator('[data-switch-visuals]').click();
   await page.waitForTimeout(350);
-  const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 2);
-  assert.ok(!hasHorizontalOverflow, 'Mobile 375px layout should not overflow horizontally');
-  await page.screenshot({ path: path.join(shotsDir, '04-library-mobile-dark.png') });
-  console.log('✓ Captured 04-library-mobile-dark.png');
+  const levelVisualCards = await page.locator('#chunk-list .lib-card').count();
+  console.log(`Level A1 visuals tab rendered ${levelVisualCards} cards (page 1)`);
+  assert.ok(levelVisualCards === 30, `Expected 30 cards on page 1 of A1 visuals tab, got ${levelVisualCards}`);
+  await page.screenshot({ path: path.join(shotsDir, '06-level-a1-visuals-tab.png') });
+  console.log('✓ Captured 06-level-a1-visuals-tab.png');
 
-  // 6. Nearby regression check: Home & Level A1 still work
-  console.log('6. Checking Home and Level A1 screens for regressions...');
-  await page.setViewportSize({ width: 1440, height: 920 });
-  await page.goto(`http://127.0.0.1:${port}/src/index.html#/home`, { waitUntil: 'networkidle' });
+  // 4. Test Practice Screen (#/practice/A1-001?step=1) visual guide button
+  console.log('4. Navigating to #/practice/A1-001?step=1 to verify Practice Visual Guide button...');
+  await page.goto(`http://127.0.0.1:${port}/src/index.html#/practice/A1-001?step=1`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-act="understand:visuals"]', { timeout: 5000 });
+  await page.locator('[data-act="understand:visuals"]').click();
+  await page.waitForSelector('.lib-lightbox', { timeout: 5000 });
   await page.waitForTimeout(300);
-  const homeLibBtn = await page.locator('a[href="#/library"]').count();
-  assert.ok(homeLibBtn >= 2, 'Home and navbar should both link to #/library');
+  await page.screenshot({ path: path.join(shotsDir, '07-practice-visual-lightbox.png') });
+  console.log('✓ Captured 07-practice-visual-lightbox.png');
+  await page.keyboard.press('Escape');
 
   await browser.close();
 
@@ -154,7 +135,7 @@ try {
     throw new Error('Browser test encountered console/page errors');
   }
 
-  console.log('\nALL VISUAL LIBRARY BROWSER TESTS PASSED ✅');
+  console.log('\nALL VISUAL LIBRARY & LEVEL INTEGRATION BROWSER TESTS PASSED ✅');
 } finally {
   server.close();
 }

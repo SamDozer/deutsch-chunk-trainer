@@ -25,6 +25,7 @@ import { toast, confirmDialog, openModal } from '../ui.js';
 import { openRecallDrill, openSprintDrill, openSpeakingDrill } from '../drills.js';
 import { audioEngine } from '../audioEngine.js';
 import { trophyManager } from '../trophies.js';
+import { ensureLibraryManifest, getVisualGuidesForLevel, openLibraryLightbox, closeLibraryLightbox } from './library.js';
 
 const RING_R = 46;
 const RING_C = 2 * Math.PI * RING_R;
@@ -155,7 +156,12 @@ function stepUnderstand(chunk, local, isLast = false) {
             </p>
           </div>
         `
-      : html`<button class="btn btn-ghost btn-sm" data-act="understand:map" style="align-self:flex-start">${icon('spark')} افتح خريطة الكلمات</button>`}
+      : html`
+          <div class="row" style="gap:10px">
+            <button class="btn btn-ghost btn-sm" data-act="understand:map">${icon('spark')} افتح خريطة الكلمات</button>
+            <button class="btn btn-ghost btn-sm" data-act="understand:visuals">${icon('library')} لوحات شرح قواعد المستوى (${chunk.level})</button>
+          </div>
+        `}
 
     <div class="between" style="padding-top:6px">
       <span class="sub muted">الفهم مش حفظ — لو مش قادر تشرح الجملة بكلامك، ارجع اقرأها تاني.</span>
@@ -1267,6 +1273,14 @@ export const practiceScreen = {
           local.showMap = true;
           paint();
           break;
+        case 'understand:visuals': {
+          const manifest = await ensureLibraryManifest();
+          const cards = getVisualGuidesForLevel(manifest, chunk.level);
+          if (cards.length) {
+            openLibraryLightbox({ items: cards, startIndex: 0, manifest });
+          }
+          break;
+        }
         case 'understand:check': {
           const key = target.dataset.check;
           store.toggleUnderstandCheck(chunk.id, key);

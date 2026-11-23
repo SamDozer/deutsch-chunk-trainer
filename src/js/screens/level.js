@@ -1,5 +1,15 @@
 import { store, STAGES } from '../store.js';
 import { html, icon, raw, chunksLabel, debounce, esc } from '../utils.js';
+import { toast } from '../ui.js';
+import {
+  ensureLibraryManifest,
+  getVisualGuidesForLevel,
+  loadUserLibState,
+  saveUserLibState,
+  renderLibraryCard,
+  openLibraryLightbox,
+  closeLibraryLightbox,
+} from './library.js';
 
 const LEVEL_COPY = {
   A1: 'أساسيات الكلام اليومي: طلبات، تعريف بنفسك، وأسئلة بسيطة.',
@@ -26,7 +36,7 @@ const getUI = (levelId) => {
       filter: 'all',
       query: '',
       limit: PAGE,
-      viewMode: 'groups', // 'groups' | 'all'
+      viewMode: 'groups', // 'groups' | 'all' | 'visuals'
       expanded: new Set(),
     };
   }
@@ -48,7 +58,6 @@ function groupMatches(group, ui, dueSet) {
   const q = ui.query.trim().toLowerCase();
   const titleMatches = q && (group.title.toLowerCase().includes(q) || group.key.toLowerCase().includes(q));
 
-  // If a filter is applied, at least one chunk in the group must match the filter
   const hasMatchingChunk = group.chunks.some((c) => chunkMatches(c, ui, dueSet));
   if (!hasMatchingChunk && !titleMatches) return false;
 
@@ -99,7 +108,6 @@ function groupCardMarkup(group, currentId, isExpanded, hasQuery, dueSet, ui) {
         ? html`<span class="chip chip-yellow" style="font-size:11px">قيد التدريب</span>`
         : html`<span class="chip" style="font-size:11px">مجموعة جديدة</span>`;
 
-  // Filter chunks if query/filter is active
   const displayChunks = hasQuery || ui.filter !== 'all'
     ? group.chunks.filter((c) => chunkMatches(c, ui, dueSet))
     : group.chunks;
@@ -161,7 +169,7 @@ function groupCardMarkup(group, currentId, isExpanded, hasQuery, dueSet, ui) {
   `;
 }
 
-function listPayload(levelId) {
+function listPayload(levelId, manifest = null, userLibState = null) {
   const level = store.level(levelId);
   const ui = getUI(levelId);
   const dueSet = new Set(store.dueItems().filter((item) => item.levelId === levelId).map((item) => item.id));
@@ -176,6 +184,49 @@ function listPayload(levelId) {
   const currentId = store.pointer()?.chunkId;
   const hasQuery = Boolean(ui.query.trim());
 
+  if (ui.viewMode === 'visuals') {
+    if (!manifest) {
+      return {
+        counts,
+        total: 0,
+        shown: 0,
+        isGroups: false,
+        isVisuals: true,
+        filteredVisuals: [],
+        html: html`<div class="panel panel-pad">جارٍ تحميل لوحات الشرح المصور للمستوى ${levelId}...</div>`,
+      };
+    }
+    const allVisuals = getVisualGuidesForLevel(manifest, levelId);
+    const q = ui.query.trim().toLowerCase();
+    const topicMap = new Map(manifest.topics.map((t) => [t.id, t]));
+    const filteredVisuals = q
+      ? allVisuals.filter((it) => {
+          const t = topicMap.get(it.topicId);
+          return `${it.title} ${it.badge} ${t?.title || ''}`.toLowerCase().includes(q);
+        })
+      : allVisuals;
+    const shownVisuals = filteredVisuals.slice(0, ui.limit);
+    const libState = userLibState || loadUserLibState();
+
+    return {
+      counts,
+      total: filteredVisuals.length,
+      shown: shownVisuals.length,
+      isGroups: false,
+      isVisuals: true,
+      filteredVisuals,
+      html: shownVisuals.length
+        ? html`<div class="lib-grid">${shownVisuals.map((item, idx) => renderLibraryCard(item, idx, topicMap, libState))}</div>`
+        : html`
+            <div class="empty" style="border:0;border-radius:0">
+              <div class="empty-icon">${icon('search')}</div>
+              <h3>مفيش لوحات مصورة مطابقة للبحث</h3>
+              <p>جرّب تمسح كلمة البحث علشان تشوف كل لوحات المستوى ${levelId}.</p>
+            </div>
+          `,
+    };
+  }
+
   if (ui.viewMode === 'groups') {
     const allGroups = store.getGroups(levelId);
     const filteredGroups = allGroups.filter((g) => groupMatches(g, ui, dueSet));
@@ -189,6 +240,8 @@ function listPayload(levelId) {
       total: filteredGroups.length,
       shown: shownGroups.length,
       isGroups: true,
+      isVisuals: false,
+      filteredVisuals: [],
       html: cards.length
         ? html`${cards}`
         : html`
@@ -208,6 +261,8 @@ function listPayload(levelId) {
       total: filtered.length,
       shown: shown.length,
       isGroups: false,
+      isVisuals: false,
+      filteredVisuals: [],
       html: rows.length
         ? html`<div class="chunk-list">${rows}</div>`
         : html`
@@ -223,6 +278,53 @@ function listPayload(levelId) {
 
 function levelDescription(id) {
   return LEVEL_COPY[id] || '';
+}
+
+function renderVisualShelf(levelId, cards) {
+  if (!cards || !cards.length) return '';
+  const preview = cards.slice(0, 6);
+  return html`
+    <section class="level-visual-shelf panel panel-pad" aria-label="الشرح المصور للمستوى ${levelId}">
+      <div class="between" style="margin-bottom:14px">
+        <div>
+          <div class="row" style="gap:8px">
+            <span class="chip chip-yellow">📐 شرح مصور بالعربي · ${levelId}</span>
+            <h3 style="font-size:19px">لوحات القواعد وتراكيب الجمل والكلمات للمستوى ${levelId}</h3>
+          </div>
+          <p class="sub muted" style="margin-top:3px">
+            ${cards.length} لوحة مصورة تشرح قواعد وتراكيب ومفردات ${levelId} بالعربي مع أمثلة جاهزة — اضغط على أي لوحة لتكبيرها فوراً.
+          </p>
+        </div>
+        <div class="row" style="gap:8px">
+          <button class="btn btn-primary btn-sm" data-switch-visuals>
+            ${icon('eye')} عرض كل اللوحات (${cards.length})
+          </button>
+          <a class="btn btn-ghost btn-sm" href="#/library?level=${levelId}">
+            ${icon('library')} فتح في المكتبة ↗
+          </a>
+        </div>
+      </div>
+
+      <div class="level-visual-strip">
+        ${preview.map(
+          (item, idx) => html`
+            <button
+              type="button"
+              class="level-visual-thumb"
+              data-shelf-open="${idx}"
+              title="${item.title}"
+            >
+              <div class="level-visual-thumb-img">
+                <img src="${item.src}" alt="${item.title}" loading="lazy" decoding="async" />
+                <span class="chip chip-navy">${item.badge}</span>
+              </div>
+              <span class="level-visual-thumb-title">${item.title}</span>
+            </button>
+          `,
+        )}
+      </div>
+    </section>
+  `;
 }
 
 export const levelScreen = {
@@ -262,7 +364,7 @@ export const levelScreen = {
             <div class="level-big">${level.id}</div>
             <div>
               <h2>${chunksLabel(level.count)} مقسمة إلى ${groups.length} مجموعة منوعة</h2>
-              <p>مجموعات منوعة تدمج قوالب وتراكيب مختلفة لتجنب التكرار الرتيب، مع مرحلة ختامية من 5 تنويعات لكل مجموعة.</p>
+              <p>مجموعات منوعة تدمج قوالب وتراكيب مختلفة لتجنب التكرار الرتيب، مع شرح مصور بالعربي ومرحلة ختامية من 5 تنويعات لكل مجموعة.</p>
             </div>
           </div>
           <div class="level-hero-side">
@@ -275,6 +377,8 @@ export const levelScreen = {
           </div>
         </section>
 
+        <div id="level-visual-shelf-root"></div>
+
         <div class="toolbar">
           <div class="filterbar" id="filters">
             ${FILTERS.map(
@@ -286,13 +390,16 @@ export const levelScreen = {
             )}
           </div>
 
-          <!-- View Mode Toggle: Groups vs All Chunks -->
+          <!-- View Mode Toggle: Groups vs All Chunks vs Level Visual Guides -->
           <div class="view-mode-toggle" id="view-mode-toggle">
             <button class="view-toggle-btn ${ui.viewMode === 'groups' ? 'is-active' : ''}" data-view="groups" title="عرض المجموعات المنوعة">
               ${icon('folder')} المجموعات المنوعة (${groups.length})
             </button>
             <button class="view-toggle-btn ${ui.viewMode === 'all' ? 'is-active' : ''}" data-view="all" title="عرض كل الجمل مسطحة">
-              ${icon('list')} كل الجمل (${level.count})
+              كل الجمل (${level.count})
+            </button>
+            <button class="view-toggle-btn ${ui.viewMode === 'visuals' ? 'is-active' : ''}" data-view="visuals" id="level-visuals-tab-btn" title="عرض لوحات الشرح المصور للمستوى">
+              ${icon('library')} الشرح المصور <span id="level-visuals-count"></span>
             </button>
           </div>
 
@@ -307,7 +414,7 @@ export const levelScreen = {
           <div class="pager" id="pager">
             ${payload.total > payload.shown
               ? html`<button class="btn btn-ghost btn-sm" data-more>عرض المزيد (${payload.total - payload.shown} فاضل)</button>`
-              : html`<span>${payload.total} ${payload.isGroups ? 'مجموعة منوعة' : 'جملة'} تحت الفلتر ده</span>`}
+              : html`<span>${payload.total} ${payload.isVisuals ? 'لوحة مصورة' : payload.isGroups ? 'مجموعة منوعة' : 'جملة'} تحت الفلتر ده</span>`}
           </div>
         </div>
 
@@ -330,15 +437,23 @@ export const levelScreen = {
     const pager = root.querySelector('#pager');
     const filters = root.querySelector('#filters');
     const viewToggle = root.querySelector('#view-mode-toggle');
+    const shelfRoot = root.querySelector('#level-visual-shelf-root');
+
+    let loadedManifest = null;
+    let levelVisualCards = [];
+    let currentFilteredVisuals = [];
+    const userLibState = loadUserLibState();
+    let isUnmounted = false;
 
     const paint = () => {
-      const payload = listPayload(levelId);
+      const payload = listPayload(levelId, loadedManifest, userLibState);
+      currentFilteredVisuals = payload.filteredVisuals || levelVisualCards;
       list.className = ui.viewMode === 'groups' ? 'groups-list' : '';
       list.innerHTML = String(payload.html);
       pager.innerHTML = String(
         payload.total > payload.shown
           ? html`<button class="btn btn-ghost btn-sm" data-more>عرض المزيد (${payload.total - payload.shown} فاضل)</button>`
-          : html`<span>${payload.total} ${payload.isGroups ? 'مجموعة قوالب' : 'جملة'} تحت الفلتر ده</span>`,
+          : html`<span>${payload.total} ${payload.isVisuals ? 'لوحة مصورة' : payload.isGroups ? 'مجموعة قوالب' : 'جملة'} تحت الفلتر ده</span>`,
       );
       filters.querySelectorAll('[data-filter]').forEach((btn) => {
         btn.classList.toggle('is-on', btn.dataset.filter === ui.filter);
@@ -346,10 +461,97 @@ export const levelScreen = {
       viewToggle?.querySelectorAll('[data-view]').forEach((btn) => {
         btn.classList.toggle('is-active', btn.dataset.view === ui.viewMode);
       });
+      if (shelfRoot) {
+        shelfRoot.hidden = ui.viewMode === 'visuals';
+      }
     };
 
+    ensureLibraryManifest()
+      .then((manifest) => {
+        if (isUnmounted) return;
+        loadedManifest = manifest;
+        levelVisualCards = getVisualGuidesForLevel(manifest, levelId);
+        const countSpan = root.querySelector('#level-visuals-count');
+        if (countSpan) countSpan.textContent = `(${levelVisualCards.length})`;
+        if (shelfRoot) {
+          shelfRoot.innerHTML = String(renderVisualShelf(levelId, levelVisualCards));
+          shelfRoot.hidden = ui.viewMode === 'visuals';
+        }
+        if (ui.viewMode === 'visuals') paint();
+      })
+      .catch(() => {});
+
     const onClick = (event) => {
-      // Toggle view mode (groups vs all)
+      // Switch to full visuals tab from shelf button
+      if (event.target.closest('[data-switch-visuals]')) {
+        ui.viewMode = 'visuals';
+        ui.limit = PAGE;
+        paint();
+        root.querySelector('#view-mode-toggle')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+
+      // Open card from shelf thumbnail
+      const shelfThumb = event.target.closest('[data-shelf-open]');
+      if (shelfThumb && loadedManifest) {
+        const idx = Number(shelfThumb.dataset.shelfOpen);
+        openLibraryLightbox({
+          items: levelVisualCards,
+          startIndex: idx,
+          manifest: loadedManifest,
+          userState: userLibState,
+          onStateChange() {
+            if (ui.viewMode === 'visuals') paint();
+          },
+        });
+        return;
+      }
+
+      // Open card from visuals grid
+      const openCard = event.target.closest('[data-open-idx]');
+      if (openCard && loadedManifest) {
+        const idx = Number(openCard.dataset.openIdx);
+        openLibraryLightbox({
+          items: currentFilteredVisuals.length ? currentFilteredVisuals : levelVisualCards,
+          startIndex: idx,
+          manifest: loadedManifest,
+          userState: userLibState,
+          onStateChange() {
+            if (ui.viewMode === 'visuals') paint();
+          },
+        });
+        return;
+      }
+
+      // Toggle read/fav on visual card inside level screen
+      const readBtn = event.target.closest('[data-toggle-read]');
+      if (readBtn) {
+        event.stopPropagation();
+        const id = readBtn.dataset.toggleRead;
+        if (userLibState.read.has(id)) userLibState.read.delete(id);
+        else userLibState.read.add(id);
+        saveUserLibState(userLibState);
+        paint();
+        return;
+      }
+
+      const favBtn = event.target.closest('[data-toggle-fav]');
+      if (favBtn) {
+        event.stopPropagation();
+        const id = favBtn.dataset.toggleFav;
+        if (userLibState.fav.has(id)) {
+          userLibState.fav.delete(id);
+          toast('تمت الإزالة من المفضلة', 'close');
+        } else {
+          userLibState.fav.add(id);
+          toast('تم الحفظ في المفضلة ✨', 'spark');
+        }
+        saveUserLibState(userLibState);
+        paint();
+        return;
+      }
+
+      // Toggle view mode (groups vs all vs visuals)
       const viewBtn = event.target.closest('[data-view]');
       if (viewBtn) {
         ui.viewMode = viewBtn.dataset.view;
@@ -403,12 +605,24 @@ export const levelScreen = {
       if (event.target.id === 'chunk-search') onSearch(event.target.value);
     };
 
+    const onKeyDown = (event) => {
+      const openEl = event.target?.closest?.('[data-open-idx]');
+      if (openEl && (event.key === 'Enter' || event.key === ' ')) {
+        event.preventDefault();
+        openEl.click();
+      }
+    };
+
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
+    root.addEventListener('keydown', onKeyDown);
 
     return () => {
+      isUnmounted = true;
       root.removeEventListener('click', onClick);
       root.removeEventListener('input', onInput);
+      root.removeEventListener('keydown', onKeyDown);
+      closeLibraryLightbox();
     };
   },
 };
