@@ -318,16 +318,22 @@ export function openLibraryLightbox({ items, startIndex = 0, manifest, userState
       event.preventDefault();
       closeLibraryLightbox();
     } else if (event.key === 'ArrowLeft') {
-      if (currentIndex < items.length - 1) {
+      const isRtl = document.documentElement.dir !== 'ltr';
+      const delta = isRtl ? 1 : -1;
+      const nextIdx = currentIndex + delta;
+      if (nextIdx >= 0 && nextIdx < items.length) {
         event.preventDefault();
-        currentIndex += 1;
+        currentIndex = nextIdx;
         zoomLevel = 1;
         paint();
       }
     } else if (event.key === 'ArrowRight') {
-      if (currentIndex > 0) {
+      const isRtl = document.documentElement.dir !== 'ltr';
+      const delta = isRtl ? -1 : 1;
+      const nextIdx = currentIndex + delta;
+      if (nextIdx >= 0 && nextIdx < items.length) {
         event.preventDefault();
-        currentIndex -= 1;
+        currentIndex = nextIdx;
         zoomLevel = 1;
         paint();
       }
