@@ -7,6 +7,9 @@ electron/whisper-bin/
 
 # Build artifacts & package outputs
 dist/
+dist-web/
+src-tauri/target/
+android/
 out/
 build/
 *.exe

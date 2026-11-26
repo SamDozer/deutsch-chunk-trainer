@@ -1,0 +1,59 @@
+name: Build & Release v2.1 (Windows Rust/Tauri + Android APK)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v2.1.0)'
+        required: true
+        default: 'v2.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Build self-contained web bundle (dist-web)
+        run: node scripts/build-web-bundle.mjs
+
+      - name: Build Capacitor 6 Android APK
+        run: |
+          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npx cap add android
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk ../ChunkTrainer-${{ github.ref_name || inputs.tag }}-Android.apk
+
+      - name: Generate SHA256 for APK
+        run: sha256sum ChunkTrainer-${{ github.ref_name || inputs.tag }}-Android.apk > apk.sha256
+
+      - name: Upload APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name || inputs.tag }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "ChunkTrainer $TAG — نسخة ويندوز (Rust) + نسخة أندرويد (APK) + المكتبة المصورة" --notes "Automated build of ChunkTrainer $TAG with Rust/Tauri v2 Windows Portable & Android APK."
+          fi
+          gh release upload "$TAG" "ChunkTrainer-$TAG-Android.apk" --clobber

@@ -1,0 +1,10 @@
+{
+  "appId": "com.abdo.chunktrainer",
+  "appName": "دفتر الشانكس",
+  "webDir": "dist-web",
+  "bundledWebRuntime": false,
+  "android": {
+    "backgroundColor": "#eaf0f6",
+    "allowMixedContent": true
+  }
+}
