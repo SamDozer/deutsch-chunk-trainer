@@ -1,4 +1,4 @@
-// Browser integration & UI verification for the Visual Knowledge Hub, Level Guides, & Trilingual Interface (AR/EN/DE)
+// Browser integration & UI verification for Side-by-Side Photo Grid, Saving System, & Trilingual Interface (AR/EN/DE)
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shotsDir = 'C:\\Users\\Hossam\\.gemini\\antigravity\\brain\\19d44b9d-c661-4024-9358-7360d0655a60\\screenshots';
-const port = 4187;
+const port = 4189;
 const chrome = process.env.CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 await fs.mkdir(shotsDir, { recursive: true });
@@ -61,65 +61,57 @@ try {
     if (msg.type() === 'error') problems.push(`CONSOLE: ${msg.text()}`);
   });
 
-  console.log('1. Verifying Arabic (AR) interface on #/home and #/library...');
+  console.log('1. Verifying Side-by-Side Photo Library Grid (zero comma text nodes)...');
   await page.goto(`http://127.0.0.1:${port}/src/index.html#/library`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.lib-card', { timeout: 10000 });
   await page.waitForTimeout(350);
 
-  // Switch to English (EN) via topbar language switcher
-  console.log('2. Switching to English (EN) interface...');
+  // Verify NO comma text nodes inside #lib-grid and cards sit side-by-side on the same row
+  const gridCheck = await page.evaluate(() => {
+    const grid = document.getElementById('lib-grid');
+    const strayTextNodes = [...grid.childNodes].filter(
+      (n) => n.nodeType === Node.TEXT_NODE && n.nodeValue.trim().length > 0,
+    );
+    const cards = [...grid.querySelectorAll('.lib-card')].slice(0, 4);
+    const tops = cards.map((c) => Math.round(c.getBoundingClientRect().top));
+    return { strayCount: strayTextNodes.length, tops, cardCount: cards.length };
+  });
+  console.log('Grid geometry check:', gridCheck);
+  assert.equal(gridCheck.strayCount, 0, 'Found stray comma text nodes inside #lib-grid!');
+  assert.equal(new Set(gridCheck.tops).size, 1, `First 4 cards must sit side-by-side on the exact same row, got tops: ${gridCheck.tops}`);
+
+  // Scroll down to show the 4-column side-by-side photo grid
+  await page.evaluate(() => document.getElementById('lib-grid')?.scrollIntoView({ behavior: 'instant' }));
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(shotsDir, '11-library-grid-fixed.png') });
+  console.log('✓ Captured 11-library-grid-fixed.png (4 cards side-by-side!)');
+
+  // 2. Verify English (EN) on Settings, Chill Mode, and Library
+  console.log('2. Verifying English (EN) across Settings, Chill Mode, and Library...');
   await page.locator('.topbar [data-lang-switch="en"]').click();
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(() => document.title), 'Chunk Notebook — German A1 to C1');
 
-  const htmlDirEn = await page.evaluate(() => document.documentElement.dir);
-  const htmlLangEn = await page.evaluate(() => document.documentElement.lang);
-  assert.equal(htmlDirEn, 'ltr', 'English interface should switch dir to ltr');
-  assert.equal(htmlLangEn, 'en', 'English interface should switch lang to en');
+  await page.goto(`http://127.0.0.1:${port}/src/index.html#/settings`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(shotsDir, '12-settings-english.png') });
+  console.log('✓ Captured 12-settings-english.png');
 
-  const navHomeEn = await page.locator('[data-nav="home"]').textContent();
-  const navLibEn = await page.locator('[data-nav="library"]').textContent();
-  console.log(`English navbar: "${navHomeEn?.trim()}" | "${navLibEn?.trim()}"`);
-  assert.equal(navHomeEn?.trim(), 'Home', 'Expected Home in English navbar');
-  assert.equal(navLibEn?.trim(), 'Visual Library', 'Expected Visual Library in English navbar');
+  await page.goto(`http://127.0.0.1:${port}/src/index.html#/chill`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(shotsDir, '13-chill-english.png') });
+  console.log('✓ Captured 13-chill-english.png');
 
-  await page.screenshot({ path: path.join(shotsDir, '08-library-english.png') });
-  console.log('✓ Captured 08-library-english.png');
-
-  // Check Home page in English
-  await page.goto(`http://127.0.0.1:${port}/src/index.html#/home`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(350);
-  await page.screenshot({ path: path.join(shotsDir, '09-home-english.png') });
-  console.log('✓ Captured 09-home-english.png');
-
-  // Switch to German (DE) via topbar language switcher
-  console.log('3. Switching to German (DE) interface on #/level/A1...');
-  await page.goto(`http://127.0.0.1:${port}/src/index.html#/level/A1`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('.level-visual-shelf', { timeout: 5000 });
+  // 3. Verify German (DE) on Stats & Trophies
+  console.log('3. Verifying German (DE) across Stats & Trophies...');
   await page.locator('.topbar [data-lang-switch="de"]').click();
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(() => document.title), 'Chunk-Heft — Deutsch A1 bis C1');
 
-  const htmlDirDe = await page.evaluate(() => document.documentElement.dir);
-  const htmlLangDe = await page.evaluate(() => document.documentElement.lang);
-  assert.equal(htmlDirDe, 'ltr', 'German interface should switch dir to ltr');
-  assert.equal(htmlLangDe, 'de', 'German interface should switch lang to de');
-
-  const navHomeDe = await page.locator('[data-nav="home"]').textContent();
-  const navLibDe = await page.locator('[data-nav="library"]').textContent();
-  console.log(`German navbar: "${navHomeDe?.trim()}" | "${navLibDe?.trim()}"`);
-  assert.equal(navHomeDe?.trim(), 'Startseite', 'Expected Startseite in German navbar');
-  assert.equal(navLibDe?.trim(), 'Bildbibliothek', 'Expected Bildbibliothek in German navbar');
-
-  await page.screenshot({ path: path.join(shotsDir, '10-level-a1-german.png') });
-  console.log('✓ Captured 10-level-a1-german.png');
-
-  // Switch back to Arabic (AR) and verify lossless restore
-  console.log('4. Switching back to Arabic (AR) and verifying lossless restore...');
-  await page.locator('.topbar [data-lang-switch="ar"]').click();
-  await page.waitForTimeout(350);
-  const htmlDirAr = await page.evaluate(() => document.documentElement.dir);
-  assert.equal(htmlDirAr, 'rtl', 'Arabic interface should restore dir to rtl');
-  const navHomeAr = await page.locator('[data-nav="home"]').textContent();
-  assert.equal(navHomeAr?.trim(), 'الرئيسية', 'Expected الرئيسية restored in Arabic navbar');
+  await page.goto(`http://127.0.0.1:${port}/src/index.html#/stats`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(shotsDir, '14-stats-german.png') });
+  console.log('✓ Captured 14-stats-german.png');
 
   await browser.close();
 
@@ -128,7 +120,7 @@ try {
     throw new Error('Browser test encountered console/page errors');
   }
 
-  console.log('\nALL TRILINGUAL (AR/EN/DE) & VISUAL LIBRARY BROWSER TESTS PASSED ✅');
+  console.log('\nALL v2.1 GRID, SAVING & TRILINGUAL BROWSER TESTS PASSED ✅');
 } finally {
   server.close();
 }

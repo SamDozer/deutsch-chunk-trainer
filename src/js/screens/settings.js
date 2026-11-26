@@ -281,8 +281,8 @@ export const settingsScreen = {
               <div class="set-group-head"><h2>عن التطبيق</h2><p>دفتر الشانكس — نسخة محلية بالكامل</p></div>
               <div class="set-row">
                 <div>
-                  <div class="set-label" id="app-version">الإصدار 1.0.0</div>
-                  <div class="set-desc">1500 جملة من A1 لـ C1، مقسمة 5 مستويات، بمسار 6 خطوات وجدول تكرار.</div>
+                  <div class="set-label" id="app-version">الإصدار 2.1.0</div>
+                  <div class="set-desc">1500 جملة من A1 لـ C1، مقسمة 5 مستويات، بمسار 6 خطوات ومكتبة مصورة شاملة.</div>
                 </div>
                 <a class="btn btn-ghost btn-sm" href="#/method">شوف المنهج</a>
               </div>

@@ -287,6 +287,30 @@ const EXACT_PHRASES = new Map([
   ['الوضع الليلي', ['Dark Mode', 'Dunkelmodus']],
   ['ألوان هادية للعين في المذاكرة بالليل', ['Eye-friendly dark palette for night study sessions', 'Augenschonende dunkle Farben für das Lernen am Abend']],
   ['تجربة الصوتيات الاستوديو', ['Studio Sound Experience', 'Studio-Klangwelt']],
+  ['مؤثرات تفاعلية وماريمبا موسيقية (Tone.js & snd-lib)', [
+    'Interactive tactile audio & marimba chimes (Tone.js & snd-lib)',
+    'Interaktive Soundeffekte & Marimba-Klänge (Tone.js & snd-lib)',
+  ]],
+  ['اختر المستويات اللي حابب تتدرب عليها. كروت فردية، تشغيل نطق تلقائي، وتمارين سريعة خفيفة مع إمكانية إدراج أي جملة في جدول التكرار المتباعد بنقرة واحدة.', [
+    'Pick the levels you want to practice: single cards, auto-play German pronunciation, quick light drills, and one-click Spaced Repetition scheduling.',
+    'Wähle deine Trainingsstufen: einzelne Karten, automatische Sprachausgabe, kurze Übungen und Ein-Klick-Wiederholungsplan.',
+  ]],
+  ['تقدر تختار مستوى واحد أو أكثر في نفس الجلسة:', [
+    'You can select one or multiple levels for this session:',
+    'Du kannst eine oder mehrere Stufen für diese Sitzung auswählen:',
+  ]],
+  ['تجاوز الجمل اللي أتممت فيها كل تمارين التشيل مود مسبقاً.', [
+    'Skip chunks where you have already completed all Chill Mode exercises.',
+    'Überspringe Chunks, deren Chill-Modus-Übungen bereits abgeschlossen sind.',
+  ]],
+  ['كل عمود أسبوع (من السبت للجمعة) وكل مربع يوم — لونه بيكبر مع عدد الإنتاجات.', [
+    'Each column is a week (Sat–Fri) and each cell is a day — deeper color means more productions.',
+    'Jede Spalte ist eine Woche (Sa–Fr), jedes Feld ein Tag — intensivere Farbe bedeutet mehr Produktionen.',
+  ]],
+  ['مواعيد دقيقة بالعدّ التنازلي المباشر للمراحل الأربع لكل جملة نشطة', [
+    'Exact live countdown schedules across all 4 spaced-repetition stages for every active chunk',
+    'Exakte Live-Countdowns für alle 4 Spaced-Repetition-Stufen jedes aktiven Chunks',
+  ]],
   ['المؤثرات الصوتية العامة', ['Master Sound Effects', 'Allgemeine Soundeffekte']],
   ['مستوى صوت المؤثرات', ['Sound Effects Volume', 'Lautstärke der Soundeffekte']],
   ['تنبيهات ومواعيد المراجعة', ['Review Alerts & Reminders', 'Wiederholungs-Benachrichtigungen']],
@@ -308,6 +332,328 @@ const EXACT_PHRASES = new Map([
   ['مسح', ['Reset', 'Zurücksetzen']],
   ['عن التطبيق', ['About the App', 'Über die App']],
   ['شوف المنهج', ['View Method', 'Methode ansehen']],
+  ['دفتر الشانكس — نسخة محلية بالكامل', ['Chunk Notebook — 100% Local & Offline', 'Chunk-Heft — 100 % lokal & offline']],
+  ['1500 جملة من A1 لـ C1، مقسمة 5 مستويات، بمسار 6 خطوات ومكتبة مصورة شاملة.', [
+    '1,500 German chunks from A1 to C1 across 5 CEFR levels, 6-step mastery path, and 619 visual learning boards.',
+    '1.500 deutsche Chunks von A1 bis C1 in 5 GER-Stufen, 6-Schritte-Methode und 619 visuelle Lehrtafeln.',
+  ]],
+  ['لغة الواجهة · Interface Language · Sprache', ['Interface Language', 'Oberflächensprache']],
+  ['تبديل فوري ودقيق للواجهة بالكامل بين العربية والإنجليزية والألمانية', [
+    'Switch the entire application interface instantly between Arabic, English, and German.',
+    'Wechsle die gesamte App-Oberfläche sofort zwischen Arabisch, Englisch und Deutsch.',
+  ]],
+  ['عدد الإنتاجات اللي عايز تخلصها في اليوم. الافتراضي 25.', [
+    'Number of sentence productions to complete per day (default: 25).',
+    'Anzahl der täglichen Satzproduktionen (Standard: 25).',
+  ]],
+  ['أصوات التفاعل، الإنجازات، التمرير، والمؤقتات.', [
+    'Tactile clicks, achievement chimes, step progression, and timers.',
+    'Klickgeräusche, Erfolgs-Signale, Schritt-Feedback und Timer.',
+  ]],
+  ['محمي بواسطة Limiter (-2dB) وReverb هادئ لمنع أي إزعاج لسماعات الرأس.', [
+    'Protected by a -2dB Limiter and soft reverb for comfortable headphone listening.',
+    'Geschützt durch einen -2dB-Limiter und sanften Hall für angenehmes Hören.',
+  ]],
+  ['معاينة واختبار أصوات الإنجازات والمؤقتات', ['Preview & Test Achievement & Timer Sounds', 'Erfolgs- & Timer-Klänge testen']],
+  ['رنة الخطوة (Set/Step)', ['Step Chime', 'Schritt-Klang']],
+  ['انتهاء المؤقت (Rest Chime)', ['Rest Timer Chime', 'Timer-Ende']],
+  ['اكتمال الجلسة (Session Complete)', ['Session Complete', 'Sitzung abgeschlossen']],
+  ['إنجاز قياسي جديد (New PR Fanfare)', ['New Record Fanfare', 'Neuer Rekord']],
+  ['⬆️ تدرج صاعد (580Hz)', ['⬆️ Step Up (580Hz)', '⬆️ Aufwärts (580Hz)']],
+  ['⬇️ تدرج هابط (420Hz)', ['⬇️ Step Down (420Hz)', '⬇️ Abwärts (420Hz)']],
+  ['🪵 نقرة تحذير هادئة (Soft Thud)', ['🪵 Soft Warning Thud', '🪵 Sanfter Hinweis']],
+  ['إشعارات نظام ويندوز والمنبه الصوتي اللطيف في مواعيد التكرار المتباعد', [
+    'Windows desktop alerts and gentle audio chime when spaced-repetition reviews become due.',
+    'Windows-Benachrichtigungen und sanfter Ton bei fälligen Wiederholungen.',
+  ]],
+  ['إشعار مكتبي هادئ يظهر تلقائيًا عند وصول موعد أي مراجعة مجدولة للمراحل الأربع', [
+    'Quiet desktop notification shown automatically when any of the 4 SR stages is due.',
+    'Dezente Desktop-Benachrichtigung, sobald eine der 4 Wiederholungsstufen fällig ist.',
+  ]],
+  ['نغمتين هادئتين خفيفتين جداً (880Hz / 987Hz) مع كل إشعار بدون أي إزعاج', [
+    'Two soft tones (880Hz / 987Hz) played gently with every review alert.',
+    'Zwei sanfte Töne (880Hz / 987Hz) bei jeder fälligen Erinnerung.',
+  ]],
+  ['تجربة الإشعار والمنبه الصوتي', ['Test Notification & Chime', 'Benachrichtigung & Ton testen']],
+  ['اختبر صوت المنبه اللطيف وشكل إشعار ويندوز فوراً للتأكد من عملهم', [
+    'Preview the gentle chime and Windows desktop notification immediately.',
+    'Teste den sanften Erinnerungston und die Desktop-Benachrichtigung sofort.',
+  ]],
+  ['نطق الجمل بصوت ويندوز المدمج (SpeechSynthesis)', ['Built-in Windows German speech synthesis', 'Integrierte deutsche Windows-Sprachausgabe']],
+  ['تشغيل نطق الجمل الألمانية تلقائياً وعبر أزرار الاستماع بمحرك ويندوز.', [
+    'Play German sentence pronunciation via the built-in Windows speech engine.',
+    'Spielt deutsche Sätze über die integrierte Windows-Sprachausgabe ab.',
+  ]],
+  ['0.75 للبطيء و1.00 للطبيعي.', ['0.75 for slow playback, 1.00 for natural speed.', '0.75 für langsam, 1.00 für normales Tempo.']],
+  ['اختار الصوت الألماني المناسب من أصوات ويندوز المتاحة.', ['Select your preferred German voice from installed Windows voices.', 'Wähle deine bevorzugte deutsche Windows-Stimme.']],
+  ['افتراضي (ويندوز)', ['Default (Windows)', 'Standard (Windows)']],
+  ['افتراضي', ['Default', 'Standard']],
+  ['جملة تجريبية: Ich möchte einen Kaffee.', ['Sample sentence: Ich möchte einen Kaffee.', 'Beispielsatz: Ich möchte einen Kaffee.']],
+  ['تفريغ نطقك الألماني محلياً على جهازك 100% بدون إنترنت لحماية خصوصيتك', [
+    'Transcribe your spoken German 100% offline on your own device for complete privacy.',
+    'Transkribiert dein gesprochenes Deutsch zu 100 % lokal und offline auf deinem Gerät.',
+  ]],
+  ['البرنامج الأساسي يعمل بكامل مميزاته بدون Whisper. الميزة دي اختيارية لتحويل صوتك لنص تلقائياً أثناء التدريب على تنويع الجمل.', [
+    'The core app works fully without Whisper. This optional module converts your voice to German text during variation drills.',
+    'Die Haupt-App funktioniert komplett ohne Whisper. Dieses optionale Modul wandelt deine Sprache bei Variationsübungen in Text um.',
+  ]],
+  ['🚀 خفيف وسريع', ['🚀 Fast & Lightweight', '🚀 Schnell & leicht']],
+  ['النموذج الخفيف (Base)', ['Lightweight Model (Base)', 'Leichtes Modell (Base)']],
+  ['~142 MB فقط', ['~142 MB only', 'Nur ~142 MB']],
+  ['💎 دقة فائقة', ['💎 Maximum Accuracy', '💎 Höchste Genauigkeit']],
+  ['النموذج الاحترافي (Turbo v3)', ['Pro Model (Turbo v3)', 'Profi-Modell (Turbo v3)']],
+  ['تقدمك محفوظ في ملف JSON على جهازك', ['Your progress is safely stored as a local JSON file with automatic backups', 'Dein Fortschritt wird lokal als JSON-Datei mit automatischen Backups gespeichert']],
+  ['مكان الملف', ['File Location', 'Speicherort']],
+  ['تقدم ملفات Obsidian القديمة', ['Legacy Obsidian Progress', 'Alter Obsidian-Fortschritt']],
+  ['استيراد', ['Import', 'Importieren']],
+  ['هيمسح كل الخطوات والإنتاجات والمراجعات. خد نسخة احتياطية الأول.', [
+    'Clears all completed steps, productions, and reviews. An automatic backup is saved first.',
+    'Löscht alle Schritte, Produktionen und Wiederholungen. Zuvor wird ein Backup angelegt.',
+  ]],
+  ['اختصارات سريعة', ['Quick Shortcuts', 'Tastenkürzel']],
+  ['Esc: خروج من الجلسة · Alt + ← / →: تنقّل بين الخطوات. كل حاجة بتتحفظ تلقائيًا.', [
+    'Esc: Close modal/session · Alt + ← / →: Switch steps. Everything auto-saves atomically.',
+    'Esc: Schließen · Alt + ← / →: Schritte wechseln. Alles wird automatisch gespeichert.',
+  ]],
+  ['نصيحة الاستمرار', ['Consistency Tip', 'Lerntipp']],
+  ['5–10 جمل في الجلسة الواحدة أحسن من 30 مرة واحدة. المراجعة اليومية أهم من الجلسات الطويلة.', [
+    '5–10 chunks per session beats 30 in one sitting. Short daily reviews build lasting fluency.',
+    '5–10 Chunks pro Sitzung sind besser als 30 auf einmal. Tägliches Wiederholen zählt am meisten.',
+  ]],
+  ['ملاحظة أمان', ['Privacy Note', 'Datenschutz']],
+  ['مفيش أي بيانات بتطلع من الجهاز. التسجيل الصوتي (لو استخدمته) بيتمسح أول ما تقفل الجلسة.', [
+    'Zero data leaves your device. Any voice recording is discarded as soon as you close the session.',
+    'Keine Daten verlassen dein Gerät. Sprachaufnahmen werden beim Schließen der Sitzung sofort gelöscht.',
+  ]],
+
+  // Chill Mode (تشيل مود)
+  ['تشيل مود · جلسة تدريب خفيفة ومريحة', ['Chill Mode · Low-Friction Relaxed Session', 'Chill-Modus · Entspannte Trainingssitzung']],
+  ['تعلّم بروقان ومن غير ضغط', ['Learn calmly at your own pace', 'Lerne entspannt und ohne Druck']],
+  ['المستويات المطلوبة للتدريب', ['Select Levels to Practice', 'Stufen für das Training auswählen']],
+  ['اختيار الكل', ['Select All', 'Alle auswählen']],
+  ['التركيز على غير المكتمل فقط', ['Focus on unfinished chunks only', 'Nur noch nicht abgeschlossene Chunks']],
+  ['الجمل المستحقة للتكرار المتباعد الآن', ['Only Spaced-Repetition Due Chunks', 'Nur fällige Wiederholungs-Chunks']],
+  ['ابدأ جلسة التشيل مود', ['Start Chill Session', 'Chill-Sitzung starten']],
+  ['تغيير المستويات', ['Change Levels', 'Stufen ändern']],
+  ['مكتمل في تشيل مود ✓', ['Completed in Chill Mode ✓', 'Im Chill-Modus erledigt ✓']],
+  ['طمس للتسميع', ['Blur for Recall', 'Zum Abrufen ausblenden']],
+  ['إظهار الألماني', ['Reveal German', 'Deutsch anzeigen']],
+  ['ببطء', ['Slow', 'Langsam']],
+  ['طبيعي', ['Natural', 'Normal']],
+  ['اضغط للكشف', ['Click to reveal', 'Zum Aufdecken klicken']],
+  ['المعنى بالعربي:', ['Meaning:', 'Bedeutung:']],
+  ['1. اقرأ الجملة بصوت واطي', ['1. Read quietly', '1. Leise lesen']],
+  ['2. اسمع وانطق ببطء', ['2. Listen & speak slowly', '2. Langsam nachsprechen']],
+  ['3. انطق بسرعة طبيعية', ['3. Speak at natural speed', '3. Im normalen Tempo sprechen']],
+  ['4. قولها من غير ما تبص', ['4. Speak from memory (blind)', '4. Frei aus dem Gedächtnis']],
+  ['5. استدعاء سريع', ['5. Quick active recall', '5. Schneller Abruf']],
+  ['+1 افتكرتها صح', ['+1 Recalled Correctly', '+1 Richtig erinnert']],
+  ['اكشف الألماني', ['Reveal German', 'Deutsch zeigen']],
+  ['إعادة المحاولة', ['Try Again', 'Erneut versuchen']],
+  ['+ إدراج في جدول التكرار المتباعد', ['+ Enroll in Spaced Repetition', '+ In Wiederholungsplan aufnehmen']],
+  ['مستحقة للمراجعة الآن', ['Due for Review Now', 'Jetzt zur Wiederholung fällig']],
+  ['تمت المراجعة وافتكرتها', ['Reviewed & Recalled', 'Wiederholt & gewusst']],
+  ['إلغاء الجدولة', ['Cancel Schedule', 'Zeitplan abbrechen']],
+  ['السابق', ['Previous', 'Zurück']],
+  ['التالي', ['Next', 'Weiter']],
+  ['إنهاء الجلسة', ['End Session', 'Sitzung beenden']],
+
+  // Drills (drills.js)
+  ['استدعاء سريع', ['Quick Active Recall', 'Schneller Abruf']],
+  ['اقرا المعنى، وقول الجملة بالألماني قبل ما تظهر', ['Read the meaning and say the German sentence before revealing it', 'Lies die Bedeutung und sprich den deutschen Satz, bevor du ihn aufdeckst']],
+  ['شوف الجملة بدري', ['Reveal Early', 'Früher zeigen']],
+  ['عرفت', ['Got It', 'Gewusst']],
+  ['لأ، نسيتها', ['Forgot It', 'Vergessen']],
+  ['استدعاء تمام', ['Recall Passed!', 'Abruf bestanden!']],
+  ['محتاج تكرار أكتر', ['Needs More Practice', 'Braucht mehr Übung']],
+  ['تمام', ['Done', 'Fertig']],
+  ['سباق الـ60 ثانية', ['60-Second Production Sprint', '60-Sekunden-Sprint']],
+  ['الهدف: 5 جمل على الأقل في الدقيقة', ['Target: At least 5 sentences in 1 minute', 'Ziel: Mindestens 5 Sätze in 1 Minute']],
+  ['+1 جملة جديدة', ['+1 New Sentence', '+1 Neuer Satz']],
+  ['كلام مرتجل', ['Spontaneous Speaking', 'Freies Sprechen']],
+  ['خلصت', ['Finished', 'Fertig']],
+  ['إلغاء', ['Cancel', 'Abbrechen']],
+  ['أيوة', ['Yes', 'Ja']],
+
+  // Stats, Review, Trophies, Method extra phrases
+  ['السلسلة الحالية المتواصلة', ['Current Active Streak', 'Aktuelle Tages-Serie']],
+  ['أكثر', ['More', 'Mehr']],
+  ['أقل', ['Less', 'Weniger']],
+  ['يوم فيه إنتاج', ['Active Days', 'Aktive Tage']],
+  ['متوسط الإنتاج في اليوم النشط', ['Avg. Productions / Active Day', 'Ø Produktionen / aktivem Tag']],
+  ['أفضل يوم لسه جاي', ['Best day is yet to come', 'Bester Tag kommt noch']],
+  ['ساعة', ['hrs', 'Std.']],
+  ['دقيقة', ['min', 'Min.']],
+  ['يوم', ['days', 'Tage']],
+  ['أيام', ['days', 'Tage']],
+  ['النشطة', ['Active', 'Aktiv']],
+  ['المستحقة', ['Due', 'Fällig']],
+  ['المكتملة', ['Completed', 'Abgeschlossen']],
+  ['الجملة (Chunk)', ['Chunk Sentence', 'Chunk (Satz)']],
+  ['الموعد القادم', ['Next Review', 'Nächster Termin']],
+  ['خطة المراحل (1-4)', ['Stages Plan (1–4)', 'Stufenplan (1–4)']],
+  ['إجراء', ['Action', 'Aktion']],
+  ['مستحق الآن', ['Due Now', 'Jetzt fällig']],
+  ['أتمت بنجاح ✅', ['Completed ✅', 'Erfolgreich ✅']],
+  ['راجع', ['Review', 'Wiederholen']],
+  ['مكتمل', ['Done', 'Fertig']],
+  ['متقنة', ['Mastered', 'Gemeistert']],
+  ['شغال عليها', ['Learning', 'In Arbeit']],
+  ['لسه جديدة', ['New', 'Neu']],
+  ['تم الإنجاز بنجاح ✓', ['Unlocked ✓', 'Freigeschaltet ✓']],
+  ['قيد التدريب والتكرار', ['In Progress', 'In Arbeit']],
+  ['الإتقان', ['Mastery', 'Meisterung']],
+  ['التدريب والتنويع', ['Practice & Variation', 'Training & Variation']],
+  ['السلاسل', ['Streaks', 'Serien']],
+  ['المرحلة', ['Stage', 'Stufe']],
+  ['عدد الجمل', ['Sentences', 'Anzahl Sätze']],
+  ['إمتى', ['When', 'Wann']],
+  ['الجلسة الأولى', ['First Session', 'Erste Sitzung']],
+  ['بعد عدة ساعات', ['After a few hours', 'Nach einigen Stunden']],
+  ['اليوم التالي', ['Next Day', 'Nächster Tag']],
+  ['بعد 3 أيام', ['After 3 Days', 'Nach 3 Tagen']],
+  ['بعد 7 أيام', ['After 7 Days', 'Nach 7 Tagen']],
+  ['نفس اليوم', ['Same day', 'Am selben Tag']],
+  ['بعد 24 ساعة', ['After 24 hours', 'Nach 24 Stunden']],
+  ['مراجعة', ['Review', 'Wiederholung']],
+  ['مراجعة نهائية', ['Final review', 'Abschluss-Wiederholung']],
+  ['غيّر الفاعل', ['Change Subject', 'Subjekt ändern']],
+  ['غيّر الزمن', ['Change Tense', 'Zeitform ändern']],
+  ['غيّر الكلمات', ['Change Vocabulary', 'Wörter austauschen']],
+  ['غيّر الموقف', ['Change Context', 'Situation ändern']],
+  ['حاول تقولها قبل ما تفتح الإجابة', ['Try saying it aloud before revealing the answer', 'Versuche den Satz zuerst aus dem Kopf zu sprechen']],
+  ['بعد يوم', ['In 1 day', 'In 1 Tag']],
+  ['فاصل أطول شوية', ['Slightly longer interval', 'Etwas längeres Intervall']],
+  ['فاصل أطول', ['Longer interval', 'Längeres Intervall']],
+  ['لسه محتاجة مراجعة', ['Needs more review', 'Braucht Wiederholung']],
+  ['هترجع تاني', ['Will return soon', 'Kommt bald wieder']],
+  ['طلعت من غير مراجعة', ['Recalled cleanly', 'Ohne Hilfe gewusst']],
+  ['خلصت مراجعة النهاردة', ["Today's Review Complete!", 'Heutige Wiederholung erledigt!']],
+  ['رجوع للرئيسية', ['Back to Home', 'Zur Startseite']],
+  ['حدّث القايمة', ['Refresh Queue', 'Liste aktualisieren']],
+  ['تخطّى', ['Skip', 'Überspringen']],
+  ['تم', ['Done', 'Erledigt']],
+  ['إنتاج', ['Produce', 'Produktion']],
+  ['مؤجل', ['Delayed', 'Verzögert']],
+  ['جارٍ تحميل المكتبة المصورة...', ['Loading Visual Library...', 'Bildbibliothek wird geladen...']],
+  ['تم استرجاع تقدمك تلقائيًا من آخر نسخة احتياطية سليمة 🛡️', [
+    'Your progress was automatically recovered from the latest healthy backup 🛡️',
+    'Dein Fortschritt wurde automatisch aus dem letzten intakten Backup wiederhergestellt 🛡️',
+  ]],
+  // 25 Library Topic Descriptions
+  ['أساسيات تكوين الجمل، الأفعال المنفصلة، حروف الجر، والماضي البسيط والمركب', [
+    'Sentence basics, separable verbs, prepositions, and Perfekt/Präteritum past tenses',
+    'Grundlagen des Satzbaus, trennbare Verben, Präpositionen sowie Perfekt & Präteritum',
+  ]],
+  ['الروابط المتقدمة، المبني للمجهول، وتراكيب المستوى المتوسط وفوق المتوسط', [
+    'Advanced connectors, passive voice, and intermediate-to-upper sentence structures',
+    'Konnektoren, Passivformen und Satzstrukturen der Mittelstufe (B1–B2)',
+  ]],
+  ['التعبيرات الأكاديمية، الكلام غير المباشر (Konjunktiv I)، وتراكيب المستوى المتقدم', [
+    'Academic phrasing, indirect speech (Konjunktiv I), and C1-level structures',
+    'Akademische Wendungen, indirekte Rede (Konjunktiv I) und C1-Strukturen',
+  ]],
+  ['خرائط ذهنية وجداول مقارنة لأهم قواعد اللغة الألمانية بالعربي', [
+    'Mind maps and comparison tables for essential German grammar rules',
+    'Mindmaps und Vergleichstabellen zu den wichtigsten deutschen Grammatikregeln',
+  ]],
+  ['بطاقات مصورة للكلمات المتشابهة والفروق الدقيقة مع الأمثلة', [
+    'Illustrated cards explaining confusingly similar German words and subtle nuances',
+    'Bildkarten zu verwechselbaren Wörtern und feinen Bedeutungsunterschieden',
+  ]],
+  ['تعبيرات جاهزة للكتابة والمحادثة والامتحانات', [
+    'Ready-to-use expressions for writing, speaking, and Goethe/Telc exams',
+    'Fertige Redemittel für Schreiben, Sprechen und Prüfungen',
+  ]],
+  ['تعبيرات عامية، اختصارات الكلام، وجداول ثنائية اللغة للحياة اليومية', [
+    'Colloquial expressions, spoken contractions, and everyday bilingual tables',
+    'Umgangssprachliche Ausdrücke, Verkürzungen und Alltagstabellen',
+  ]],
+  ['مصطلحات، جمل، ودليل العمليات في بيئة العمل وخدمة العملاء', [
+    'Workplace vocabulary, phrases, and operations guide for German customer service',
+    'Fachbegriffe, Sätze und Leitfaden für den deutschsprachigen Kundenservice',
+  ]],
+  ['قصص سيزيف، نارسيس، وأبطال الأساطير اليونانية بالألمانية', [
+    'Stories of Sisyphus, Narcissus, and Greek mythological heroes in German',
+    'Geschichten von Sisyphos, Narziss und Helden der griechischen Mythologie',
+  ]],
+  ['رموز وآلهة وأساطير مصر القديمة مصورة ومشروحة بالألمانية', [
+    'Symbols, deities, and myths of Ancient Egypt illustrated in German',
+    'Symbole, Götter und Mythen des Alten Ägypten auf Deutsch erklärt',
+  ]],
+  ['محطات وشخصيات من التاريخ المصري القديم والحديث بالألمانية', [
+    'Key milestones and figures of ancient and modern Egyptian history in German',
+    'Meilensteine und Persönlichkeiten der ägyptischen Geschichte auf Deutsch',
+  ]],
+  ['سلسلة مصورة متسلسلة (مثل رحلة موسى والخضر) بلغة ألمانية سلسة', [
+    'Illustrated serialized stories (e.g., Musa & Al-Khidr) in clear German',
+    'Illustrierte Bildergeschichten (z. B. Musa & al-Khidr) in klarem Deutsch',
+  ]],
+  ['أحداث تاريخية وتحولات سياسية كبرى مشروحة بالألمانية', [
+    'Major historical events and political turning points explained in German',
+    'Wichtige historische Ereignisse und politische Wendepunkte auf Deutsch',
+  ]],
+  ['مفاهيم الفلسفة السياسية والدولة والمجتمع', [
+    'Core concepts of political philosophy, statecraft, and society',
+    'Grundbegriffe der politischen Philosophie, Staat und Gesellschaft',
+  ]],
+  ['سلاسل مصورة عن الدماغ، الإدراك، الانفصال، والصحة النفسية', [
+    'Illustrated series on the brain, perception, dissociation, and mental health',
+    'Bildserien über Gehirn, Wahrnehmung, Dissoziation und psychische Gesundheit',
+  ]],
+  ['مدارس الفلسفة، المنطق، والأسئلة الوجودية الكبرى بالألمانية', [
+    'Schools of philosophy, logic, and major existential questions in German',
+    'Philosophische Strömungen, Logik und große Lebensfragen auf Deutsch',
+  ]],
+  ['تقاطع علم النفس مع الفلسفة وفهم الذات', [
+    'Where psychology meets philosophy and self-understanding',
+    'Schnittstelle zwischen Psychologie, Philosophie und Selbsterkenntnis',
+  ]],
+  ['مفاهيم الوجود والكون وما وراء الطبيعة', [
+    'Concepts of being, existence, and metaphysics',
+    'Begriffe des Seins, der Existenz und der Metaphysik',
+  ]],
+  ['كيف نفرق بين العلم الحقيقي والخرافات والعلوم الزائفة', [
+    'Distinguishing real scientific method from myths and pseudoscience',
+    'Wie man echte Wissenschaft von Mythen und Pseudowissenschaft unterscheidet',
+  ]],
+  ['كيف يتعلم الدماغ ويبني الذاكرة طويلة المدى', [
+    'How the brain learns and builds durable long-term memory',
+    'Wie das Gehirn lernt und dauerhaftes Langzeitgedächtnis aufbaut',
+  ]],
+  ['تحليل حبكات وشخصيات الأعمال الدرامية والسينمائية بالألمانية', [
+    'Plot and character analyses of films and series in German',
+    'Handlungs- und Charakteranalysen bekannter Filme und Serien auf Deutsch',
+  ]],
+  ['قراءات وملخصات مصورة لأهم الروايات والأعمال الأدبية', [
+    'Illustrated summaries and readings of classic world novels',
+    'Illustrierte Zusammenfassungen bedeutender Romane und Literaturwerke',
+  ]],
+  ['قصائد واقتباسات أدبية وفلسفية مختارة', [
+    'Selected literary and philosophical poems and quotes',
+    'Ausgewählte literarische und philosophische Gedichte und Zitate',
+  ]],
+  ['ملامح الثقافة والحياة الاجتماعية في ألمانيا', [
+    'Highlights of German culture, traditions, and everyday social life',
+    'Einblicke in die deutsche Kultur und das gesellschaftliche Leben',
+  ]],
+  ['موضوعات عامة ومناقشات ثقافية بالألمانية', [
+    'General topics and cultural discussions in German',
+    'Allgemeine Themen und kulturelle Diskussionen auf Deutsch',
+  ]],
+  // Tooltips & Controls
+  ['تصغير (-)', ['Zoom Out (-)', 'Verkleinern (-)']],
+  ['إعادة الضبط', ['Reset Zoom', 'Zurücksetzen']],
+  ['تكبير (+)', ['Zoom In (+)', 'Vergrößern (+)']],
+  ['حفظ في المفضلة', ['Save to Favorites', 'Zu Favoriten hinzufügen']],
+  ['إزالة من المفضلة', ['Remove from Favorites', 'Aus Favoriten entfernen']],
+  ['إلغاء علامة المقروء', ['Unmark as Read', 'Als ungelesen markieren']],
+  ['إغلاق (Esc)', ['Close (Esc)', 'Schließen (Esc)']],
+  ['السابق (سهم يمين)', ['Previous', 'Vorherige']],
+  ['التالي (سهم يسار)', ['Next', 'Nächste']],
+  ['رجوع للرئيسية', ['Back to Home', 'Zurück zur Startseite']],
+  ['سلسلة الأيام المتواصلة', ['Active Day Streak', 'Aktive Tages-Serie']],
+  ['استمع لنطق الجملة (VoiceStudio)', ['Listen to German pronunciation', 'Deutsche Aussprache anhören']],
 ]);
 
 // Regex rules for dynamic Arabic strings with embedded numbers/variables
@@ -699,6 +1045,116 @@ const REGEX_RULES = [
     en: (_, topic, cur, tot) => `${translateText(topic.trim(), 'en')} · Board ${cur} of ${tot}`,
     de: (_, topic, cur, tot) => `${translateText(topic.trim(), 'de')} · Tafel ${cur} von ${tot}`,
   },
+  {
+    re: /^—\s*(.+)$/,
+    en: (_, rest) => `— ${translateText(rest.trim(), 'en')}`,
+    de: (_, rest) => `— ${translateText(rest.trim(), 'de')}`,
+  },
+  {
+    re: /^الإصدار\s+([\d.]+)(.*)$/,
+    en: (_, ver, rest) => `Version ${ver}${rest}`,
+    de: (_, ver, rest) => `Version ${ver}${rest}`,
+  },
+  {
+    re: /^(\d+)\s+من\s+(\d+)\s+متقن$/,
+    en: (_, a, b) => `${a} of ${b} mastered`,
+    de: (_, a, b) => `${a} von ${b} gemeistert`,
+  },
+  {
+    re: /^(\d+)\s+شغال عليه\s+·\s+(\d+)\s+مستحق$/,
+    en: (_, l, d) => `${l} in progress · ${d} due`,
+    de: (_, l, d) => `${l} in Arbeit · ${d} fällig`,
+  },
+  {
+    re: /^(\d+)\s+النهاردة$/,
+    en: (_, n) => `${n} today`,
+    de: (_, n) => `${n} heute`,
+  },
+  {
+    re: /^(\d+)\s+مستحق الآن$/,
+    en: (_, n) => `${n} due now`,
+    de: (_, n) => `${n} jetzt fällig`,
+  },
+  {
+    re: /^(\d+)\s+مفتوح$/,
+    en: (_, n) => `${n} unlocked`,
+    de: (_, n) => `${n} freigeschaltet`,
+  },
+  {
+    re: /^(\d+)\s+قيد الإنجاز$/,
+    en: (_, n) => `${n} in progress`,
+    de: (_, n) => `${n} in Arbeit`,
+  },
+  {
+    re: /^(\d+)\s+جملة متقنة$/,
+    en: (_, n) => `${n} mastered chunks`,
+    de: (_, n) => `${n} gemeisterte Chunks`,
+  },
+  {
+    re: /^الكل\s*\((\d+)\)$/,
+    en: (_, n) => `All (${n})`,
+    de: (_, n) => `Alle (${n})`,
+  },
+  {
+    re: /^المحققة\s*\((\d+)\)$/,
+    en: (_, n) => `Unlocked (${n})`,
+    de: (_, n) => `Freigeschaltet (${n})`,
+  },
+  {
+    re: /^قيد الإنجاز\s*\((\d+)\)$/,
+    en: (_, n) => `In Progress (${n})`,
+    de: (_, n) => `In Arbeit (${n})`,
+  },
+  {
+    re: /^فاضل\s+(\d+)\s+لإتاحة الشهادة$/,
+    en: (_, n) => `${n} more chunks to unlock certificate`,
+    de: (_, n) => `Noch ${n} Chunks bis zum Zertifikat`,
+  },
+  {
+    re: /^(\d+)\s+شانك متقن من\s+(\d+)\s+\((\d+)%\)$/,
+    en: (_, a, b, p) => `${a} of ${b} chunks mastered (${p}%)`,
+    de: (_, a, b, p) => `${a} von ${b} Chunks gemeistert (${p}%)`,
+  },
+  {
+    re: /^كارت\s+(\d+)\s+من\s+(\d+)$/,
+    en: (_, a, b) => `Card ${a} of ${b}`,
+    de: (_, a, b) => `Karte ${a} von ${b}`,
+  },
+  {
+    re: /^(\d+)\s+من\s+(\d+)\s+تمارين$/,
+    en: (_, a, b) => `${a} of ${b} exercises`,
+    de: (_, a, b) => `${a} von ${b} Übungen`,
+  },
+  {
+    re: /^(\d+)\s*\/\s*(\d+)\s+مكتملة$/,
+    en: (_, a, b) => `${a} / ${b} completed`,
+    de: (_, a, b) => `${a} / ${b} erledigt`,
+  },
+  {
+    re: /^خطوة\s+(\d+)\s+من\s+(\d+)$/,
+    en: (_, a, b) => `Step ${a} of ${b}`,
+    de: (_, a, b) => `Schritt ${a} von ${b}`,
+  },
+  {
+    re: /^جلسة 1 \((\d+)\/10\)$/,
+    en: (_, n) => `Session 1 (${n}/10)`,
+    de: (_, n) => `Sitzung 1 (${n}/10)`,
+  },
+  {
+    re: /^المجموعة الختامية للمستوى 🌟 \((\d+) جمل\)$/,
+    en: (_, n) => `Level Capstone Group 🌟 (${n} chunks)`,
+    de: (_, n) => `Abschlussgruppe 🌟 (${n} Sätze)`,
+  },
+  {
+    re: /^جملة جاهزة في جلسة التشيل مود الحالية \(من أصل (\d+)\)$/,
+    en: (_, total) => `chunks ready in this Chill session (out of ${total})`,
+    de: (_, total) => `Chunks bereit für diese Chill-Sitzung (von ${total})`,
+  },
+  {
+    re: /^(\d+)\s+من\s+(\d+)$/,
+    en: (_, a, b) => `${a} of ${b}`,
+    de: (_, a, b) => `${a} von ${b}`,
+  },
 ];
 
 // Placeholder translations
@@ -754,10 +1210,11 @@ export function applyDOMLocalization(root = document.body) {
   if (!root) return;
   const lang = currentLang;
 
-  // Update document attributes
+  // Update document attributes & page title
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   document.documentElement.dataset.lang = lang;
+  document.title = lang === 'en' ? 'Chunk Notebook — German A1 to C1' : lang === 'de' ? 'Chunk-Heft — Deutsch A1 bis C1' : 'دفتر الشانكس';
 
   // Update language switcher pill state in topbar
   document.querySelectorAll('[data-lang-switch]').forEach((btn) => {
@@ -795,7 +1252,7 @@ export function applyDOMLocalization(root = document.body) {
     }
   }
 
-  // Translate placeholders and titles
+  // Translate placeholders, titles, and aria-labels
   root.querySelectorAll?.('input[placeholder], textarea[placeholder]').forEach((el) => {
     if (!el.dataset.origPlaceholder) {
       el.dataset.origPlaceholder = el.getAttribute('placeholder') || '';
@@ -805,7 +1262,25 @@ export function applyDOMLocalization(root = document.body) {
       el.setAttribute('placeholder', orig);
     } else if (PLACEHOLDERS.has(orig)) {
       el.setAttribute('placeholder', PLACEHOLDERS.get(orig)[lang === 'en' ? 0 : 1]);
+    } else {
+      el.setAttribute('placeholder', translateText(orig, lang));
     }
+  });
+
+  root.querySelectorAll?.('[title]').forEach((el) => {
+    if (!el.dataset.origTitle) {
+      el.dataset.origTitle = el.getAttribute('title') || '';
+    }
+    const orig = el.dataset.origTitle;
+    el.setAttribute('title', lang === 'ar' ? orig : translateText(orig, lang));
+  });
+
+  root.querySelectorAll?.('[aria-label]').forEach((el) => {
+    if (!el.dataset.origAriaLabel) {
+      el.dataset.origAriaLabel = el.getAttribute('aria-label') || '';
+    }
+    const orig = el.dataset.origAriaLabel;
+    el.setAttribute('aria-label', lang === 'ar' ? orig : translateText(orig, lang));
   });
 }
 
